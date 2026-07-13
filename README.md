@@ -1,1 +1,1 @@
-# smile_dashboard
+# SMILE - Student Career & Milestone Learning Environment
