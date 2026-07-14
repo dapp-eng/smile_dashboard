@@ -1,0 +1,20 @@
+[theme]
+# Keep these values in sync with COLORS in utils/theme.py — this file
+# controls native widgets (buttons, borders, sidebar), theme.py controls
+# chart color mappings. Same palette, two different places it has to apply.
+
+primaryColor = "#0969da"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f6f8fa"
+textColor = "#1F2328"
+font = "sans serif"
+borderColor = "#d0d7de"
+
+# Default categorical palette for Streamlit's own built-in charts
+# (st.bar_chart, st.line_chart, etc). For Plotly/Altair charts, use the
+# fixed color_discrete_map dicts from utils/theme.py instead — this array
+# is only a fallback for the few places someone uses a native st.*_chart.
+chartCategoricalColors = ["#0969da", "#c08a5b", "#2da44e", "#cf222e", "#6e7781", "#d4a72c"]
+
+[theme.sidebar]
+backgroundColor = "#f6f8fa"
