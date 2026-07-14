@@ -1,20 +1,54 @@
 [theme]
-# Keep these values in sync with COLORS in utils/theme.py — this file
-# controls native widgets (buttons, borders, sidebar), theme.py controls
-# chart color mappings. Same palette, two different places it has to apply.
+base = "light"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "Montserrat:https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&display=swap"
+codeFont = "monospace"
+baseRadius = "medium"
+showWidgetBorder = true
+showSidebarBorder = false
 
-primaryColor = "#0969da"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f6f8fa"
-textColor = "#1F2328"
-font = "sans serif"
-borderColor = "#d0d7de"
+# Warna chart
+chartCategoricalColors = [
+    "#3462ED", # primary
+    "#4748B0", # ungu
+    "#10B981", # hijau
+    "#EF4444", # merah
+    "#1E293B", # font
+    "#121F45", # navy
+]
 
-# Default categorical palette for Streamlit's own built-in charts
-# (st.bar_chart, st.line_chart, etc). For Plotly/Altair charts, use the
-# fixed color_discrete_map dicts from utils/theme.py instead — this array
-# is only a fallback for the few places someone uses a native st.*_chart.
-chartCategoricalColors = ["#0969da", "#c08a5b", "#2da44e", "#cf222e", "#6e7781", "#d4a72c"]
+# Light mode
+[theme.light]
+primaryColor = "#3462ED"              # primary
+backgroundColor = "#F8FAFC"           # bg konten
+secondaryBackgroundColor = "#FFFFFF"  # bg card/widget
+textColor = "#1E293B"                 # font
+linkColor = "#3462ED"                 # primary
+borderColor = "#E2E8F0"               # border tipis
+codeBackgroundColor = "#F1F5F9"       # bg code
+codeTextColor = "#1E293B"             # font
 
-[theme.sidebar]
-backgroundColor = "#f6f8fa"
+# Sidebar - light mode
+[theme.light.sidebar]
+backgroundColor = "#121F45"           # navy
+secondaryBackgroundColor = "#4748B0"  # ungu, hover/active
+textColor = "#E2E8F0"                 # teks terang
+primaryColor = "#3462ED"              # primary
+
+# Dark mode
+[theme.dark]
+primaryColor = "#3462ED"              # primary
+backgroundColor = "#0F172A"           # bg gelap
+secondaryBackgroundColor = "#1E293B"  # bg card, pakai warna font
+textColor = "#F1F5F9"                 # teks terang
+linkColor = "#5C82F0"                 # primary, lebih terang
+borderColor = "#334155"               # border gelap
+codeBackgroundColor = "#1E293B"       # bg code
+codeTextColor = "#F1F5F9"             # teks terang
+
+# Sidebar - dark mode
+[theme.dark.sidebar]
+backgroundColor = "#121F45"           # navy
+secondaryBackgroundColor = "#4748B0"  # ungu, hover/active
+textColor = "#E2E8F0"                 # teks terang
+primaryColor = "#3462ED"              # primary
