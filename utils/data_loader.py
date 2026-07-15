@@ -5,22 +5,33 @@ import os
 from supabase import create_client, Client
 
 DATA_DIR = "data"
+import shutil
 
 @st.cache_resource
 def download_csvs():
-    if not os.path.exists(DATA_DIR) or not os.listdir(DATA_DIR):
+    has_csvs = (
+        os.path.exists(DATA_DIR)
+        and any(f.endswith(".csv") for f in os.listdir(DATA_DIR))
+    )
+    if not has_csvs:
         gdown.download_folder(
-            id=st.secrets["gdrive_folder_id"],
+            id=st.secrets["gdrive_file_id"],
             output=DATA_DIR,
             quiet=False,
             use_cookies=False,
         )
+        for entry in os.listdir(DATA_DIR):
+            sub = os.path.join(DATA_DIR, entry)
+            if os.path.isdir(sub):
+                for f in os.listdir(sub):
+                    shutil.move(os.path.join(sub, f), os.path.join(DATA_DIR, f))
+                os.rmdir(sub)
     return DATA_DIR
 
 @st.cache_data
 def load_csv_table(table_name: str) -> pd.DataFrame:
-    download_csvs()  
-    path = os.path.join(DATA_DIR, f"{table_name}.csv")
+    csv_dir = download_csvs()
+    path = os.path.join(csv_dir, f"{table_name}.csv")
     return pd.read_csv(path)
 
 
