@@ -71,3 +71,131 @@ def get_ghosting_flags(tracking_student: pd.DataFrame, today: pd.Timestamp = Non
 
     df["ghosting_check"] = df.apply(ghosting_check, axis=1)
     return df[df["ghosting_check"] != "ok"]
+
+
+# ─────────────────────────────────────────────
+#  BT-08: Data Quality / Sync Checks
+# ─────────────────────────────────────────────
+
+def get_sync_mismatch(student_all: pd.DataFrame, status_student: pd.DataFrame) -> pd.DataFrame:
+    """
+    BT-08: Detect mismatches between student_all and status_student.
+    Returns rows with mismatch_type: missing_in_status_student,
+    missing_in_student_all, or name_mismatch.
+    """
+    df = student_all[["nim", "nama"]].merge(
+        status_student[["nim", "nama"]],
+        on="nim",
+        how="outer",
+        suffixes=("_student_all", "_status_student"),
+        indicator=True,
+    )
+
+    def classify(row):
+        if row["_merge"] == "left_only":
+            return "missing_in_status_student"
+        elif row["_merge"] == "right_only":
+            return "missing_in_student_all"
+        elif row["nama_student_all"] != row["nama_status_student"]:
+            return "name_mismatch"
+        return "ok"
+
+    df["mismatch_type"] = df.apply(classify, axis=1)
+    df = df[df["mismatch_type"] != "ok"].drop(columns=["_merge"])
+    return df
+
+
+def get_orphaned_tracking(
+    tracking_student: pd.DataFrame, student_all: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Detect tracking_student rows whose nim doesn't exist in student_all.
+    These are legacy FK violations from before constraint enforcement.
+    """
+    valid_nims = set(student_all["nim"])
+    df = tracking_student.copy()
+    df["is_orphan"] = ~df["nim"].isin(valid_nims)
+    return df[df["is_orphan"]].drop(columns=["is_orphan"])
+
+
+def get_denorm_inconsistencies(
+    tracking_student: pd.DataFrame,
+    student_all: pd.DataFrame,
+    tracking_company: pd.DataFrame,
+    company: pd.DataFrame,
+    talent_request: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Detect denormalization mismatches: duplicated columns reachable via FK
+    that disagree with their canonical source.
+
+    Checks:
+    1. tracking_student.student_name vs student_all.nama (via nim)
+    2. tracking_company.nama_perusahaan vs company.company_name (via id_company)
+    3. tracking_company fields vs talent_request fields (via id_talent_req)
+    """
+    issues = []
+
+    # Check 1: tracking_student.student_name vs student_all.nama
+    ts_sa = tracking_student[["id_tracking_student", "nim", "student_name"]].merge(
+        student_all[["nim", "nama"]], on="nim", how="inner"
+    )
+    mask = ts_sa["student_name"] != ts_sa["nama"]
+    for _, row in ts_sa[mask].iterrows():
+        issues.append({
+            "table": "tracking_student",
+            "record_id": row["id_tracking_student"],
+            "field": "student_name",
+            "actual_value": row["student_name"],
+            "expected_value": row["nama"],
+            "source_table": "student_all",
+        })
+
+    # Check 2: tracking_company.nama_perusahaan vs company.company_name
+    tc_co = tracking_company[["id_tracking_company", "id_company", "nama_perusahaan"]].merge(
+        company[["id_company", "company_name"]], on="id_company", how="inner"
+    )
+    mask = tc_co["nama_perusahaan"] != tc_co["company_name"]
+    for _, row in tc_co[mask].iterrows():
+        issues.append({
+            "table": "tracking_company",
+            "record_id": row["id_tracking_company"],
+            "field": "nama_perusahaan",
+            "actual_value": row["nama_perusahaan"],
+            "expected_value": row["company_name"],
+            "source_table": "company",
+        })
+
+    # Check 3: tracking_company vs talent_request shared fields
+    shared_fields = [
+        ("posisi", "nama_posisi"),
+        ("jenis_penempatan", "jenis_penempatan"),
+        ("bidang_studi_dicari", "bidang_studi_dibutuhkan"),
+    ]
+    tr_cols = ["id_talent_req"] + [src for _, src in shared_fields]
+    tc_cols = ["id_tracking_company", "id_talent_req"] + [tc for tc, _ in shared_fields]
+    tc_tr = tracking_company[tc_cols].merge(
+        talent_request[tr_cols], on="id_talent_req", how="inner", suffixes=("_tc", "_tr")
+    )
+    for tc_field, tr_field in shared_fields:
+        col_tc = f"{tc_field}_tc" if tc_field == tr_field else tc_field
+        col_tr = f"{tr_field}_tr" if tc_field == tr_field else tr_field
+        # Handle suffix naming from merge
+        if col_tc not in tc_tr.columns:
+            col_tc = tc_field
+        if col_tr not in tc_tr.columns:
+            col_tr = tr_field
+        mask = tc_tr[col_tc].fillna("") != tc_tr[col_tr].fillna("")
+        for _, row in tc_tr[mask].iterrows():
+            issues.append({
+                "table": "tracking_company",
+                "record_id": row["id_tracking_company"],
+                "field": tc_field,
+                "actual_value": row[col_tc],
+                "expected_value": row[col_tr],
+                "source_table": "talent_request",
+            })
+
+    return pd.DataFrame(issues) if issues else pd.DataFrame(
+        columns=["table", "record_id", "field", "actual_value", "expected_value", "source_table"]
+    )

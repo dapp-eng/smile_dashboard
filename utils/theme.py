@@ -1,26 +1,25 @@
 """
 Shared design tokens for the SSDC dashboard.
 
-RULE: import colors from here in every page. Never hardcode hex values
-or redefine palettes locally — that's exactly how three people end up
-with three different shades of "green" across tabs.
+Base colors here MUST match [theme] in .streamlit/config.toml.
+config.toml handles native Streamlit widget theming automatically;
+this file exists only for Plotly category-color mapping, which
+config.toml has no mechanism for (it can't map specific string
+values like "Ghosting" to specific colors).
 """
 
 import streamlit as st
 
+# Mirrors .streamlit/config.toml [theme] and chartCategoricalColors.
+# If you change a color here, change it in config.toml too.
 COLORS = {
-    "primary": "#0969da",
-    "secondary": "#c08a5b",
-    "success": "#2da44e",
-    "danger": "#cf222e",
-    "neutral": "#6e7781",
-    "warning": "#d4a72c",
+    "primary": "#3462ED",     # theme.primaryColor
+    "secondary": "#4748B0",   # ungu
+    "success": "#10B981",     # hijau
+    "danger": "#EF4444",      # merah
+    "neutral": "#6e7781",     # not in config.toml — kept for muted/inactive states
+    "warning": "#d4a72c",     # not in config.toml — kept for FU1-3 states
 }
-
-# Fixed category -> color mappings.
-# Use these with `color_discrete_map` (NOT `color_discrete_sequence`) in
-# Plotly/Altair so the same category is always the same color no matter
-# which tab it shows up in or what order it appears in someone's dataframe.
 
 PROGRESS_COLORS = {
     "Selecting Student by Company": COLORS["neutral"],
@@ -61,16 +60,20 @@ ELIGIBLE_COLORS = {
 
 
 def apply_style():
-    """Call once at the top of every page for consistent card/layout styling."""
+    """
+    Call once per page for the few things config.toml can't set:
+    hiding default chrome, and letting stMetric use theme-aware colors
+    instead of Streamlit's flat default (rather than hardcoding white,
+    which breaks in [theme.dark]).
+    """
     st.markdown(
         """
         <style>
         #MainMenu, footer {visibility: hidden;}
         div[data-testid="stMetric"] {
-            background: white;
+            background: var(--secondary-background-color);
             border-radius: 12px;
             padding: 16px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
         </style>
         """,
