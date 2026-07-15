@@ -6,3 +6,5 @@ venv/
 data/*
 !data/.gitkeep
 docs/*
+.vscode/
+.claude/
