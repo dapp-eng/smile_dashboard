@@ -32,7 +32,12 @@ def download_csvs():
 def load_csv_table(table_name: str) -> pd.DataFrame:
     csv_dir = download_csvs()
     path = os.path.join(csv_dir, f"{table_name}.csv")
-    return pd.read_csv(path)
+    # Sniff delimiter (status_student uses ';', others use ',')
+    with open(path, "r", encoding="utf-8-sig") as f:
+        sample = f.read(2048)
+    import csv
+    dialect = csv.Sniffer().sniff(sample)
+    return pd.read_csv(path, sep=dialect.delimiter, encoding="utf-8-sig")
 
 
 # Layer 2: Supabase (live, mutable, powers CRUD)

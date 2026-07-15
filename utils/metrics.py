@@ -4,12 +4,12 @@ import pandas as pd
 def get_eligible_students(student_all: pd.DataFrame, status_student: pd.DataFrame) -> pd.DataFrame:
     """
     BT-06: Eligible students = status is Active.
-    Joins student_all with status_student on nim.
+    Joins student_all with status_student on NIM.
     """
-    df = student_all.merge(status_student, on="nim", how="inner", suffixes=("", "_status"))
+    df = student_all.merge(status_student, on="NIM", how="inner", suffixes=("", "_status"))
     df = df[df["status"] == "Active"]
     return df[[
-        "nim", "nama", "program_studi", "semester",
+        "NIM", "nama", "program_studi", "semester",
         "ipk", "status", "domisili", "ketersediaan", "tools"
     ]]
 
@@ -83,9 +83,9 @@ def get_sync_mismatch(student_all: pd.DataFrame, status_student: pd.DataFrame) -
     Returns rows with mismatch_type: missing_in_status_student,
     missing_in_student_all, or name_mismatch.
     """
-    df = student_all[["nim", "nama"]].merge(
-        status_student[["nim", "nama"]],
-        on="nim",
+    df = student_all[["NIM", "nama"]].merge(
+        status_student[["NIM", "nama"]],
+        on="NIM",
         how="outer",
         suffixes=("_student_all", "_status_student"),
         indicator=True,
@@ -109,12 +109,12 @@ def get_orphaned_tracking(
     tracking_student: pd.DataFrame, student_all: pd.DataFrame
 ) -> pd.DataFrame:
     """
-    Detect tracking_student rows whose nim doesn't exist in student_all.
+    Detect tracking_student rows whose NIM doesn't exist in student_all.
     These are legacy FK violations from before constraint enforcement.
     """
-    valid_nims = set(student_all["nim"])
+    valid_NIMs = set(student_all["NIM"])
     df = tracking_student.copy()
-    df["is_orphan"] = ~df["nim"].isin(valid_nims)
+    df["is_orphan"] = ~df["NIM"].isin(valid_NIMs)
     return df[df["is_orphan"]].drop(columns=["is_orphan"])
 
 
@@ -130,15 +130,15 @@ def get_denorm_inconsistencies(
     that disagree with their canonical source.
 
     Checks:
-    1. tracking_student.student_name vs student_all.nama (via nim)
+    1. tracking_student.student_name vs student_all.nama (via NIM)
     2. tracking_company.nama_perusahaan vs company.company_name (via id_company)
     3. tracking_company fields vs talent_request fields (via id_talent_req)
     """
     issues = []
 
     # Check 1: tracking_student.student_name vs student_all.nama
-    ts_sa = tracking_student[["id_tracking_student", "nim", "student_name"]].merge(
-        student_all[["nim", "nama"]], on="nim", how="inner"
+    ts_sa = tracking_student[["id_tracking_student", "NIM", "student_name"]].merge(
+        student_all[["NIM", "nama"]], on="NIM", how="inner"
     )
     mask = ts_sa["student_name"] != ts_sa["nama"]
     for _, row in ts_sa[mask].iterrows():
