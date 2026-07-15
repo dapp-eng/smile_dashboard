@@ -105,6 +105,38 @@ def get_sync_mismatch(student_all: pd.DataFrame, status_student: pd.DataFrame) -
     return df
 
 
+def get_stale_sync(status_student: pd.DataFrame, reference_date: pd.Timestamp = None) -> pd.DataFrame:
+    """
+    BT-08: Flag status_student records whose sync_date is significantly old.
+    Uses the latest sync_date in the dataset as reference (since this is a
+    static CSV snapshot, not a live system).
+
+    Thresholds:
+        >90 days  = stale
+        >180 days = very_stale
+        >365 days = critical
+    """
+    df = status_student.copy()
+    df["sync_date"] = pd.to_datetime(df["sync_date"], dayfirst=True)
+
+    if reference_date is None:
+        reference_date = df["sync_date"].max()
+
+    df["days_since_sync"] = (reference_date - df["sync_date"]).dt.days
+
+    def classify(days):
+        if days > 365:
+            return "critical"
+        elif days > 180:
+            return "very_stale"
+        elif days > 90:
+            return "stale"
+        return "ok"
+
+    df["staleness"] = df["days_since_sync"].apply(classify)
+    return df
+
+
 def get_orphaned_tracking(
     tracking_student: pd.DataFrame, student_all: pd.DataFrame
 ) -> pd.DataFrame:

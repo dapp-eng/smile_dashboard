@@ -23,8 +23,8 @@ div[data-testid="stMetric"] {
     border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 20px 24px 16px;
-    margin-bottom: 16px;
-    overflow: auto;
+    height: 100%;
+    box-sizing: border-box;
 }
 .smile-panel-title {
     font-family: 'Montserrat', sans-serif;
@@ -200,8 +200,7 @@ def chart_panel(title: str = "", height: int = 420):
     )
     with st.container(height=height, border=False):
         st.markdown(
-            f'<div class="smile-panel" style="min-height:{height - 40}px;">'
-            f'{title_html}',
+            f'<div class="smile-panel">{title_html}',
             unsafe_allow_html=True,
         )
         yield
@@ -222,8 +221,7 @@ def table_panel(title: str = "", height: int = 380):
     )
     with st.container(height=height, border=False):
         st.markdown(
-            f'<div class="smile-panel" style="min-height:{height - 40}px;">'
-            f'{title_html}',
+            f'<div class="smile-panel">{title_html}',
             unsafe_allow_html=True,
         )
         yield
@@ -242,11 +240,10 @@ def panel(title: str = "", height: int = None):
     title_html = (
         f'<p class="smile-panel-title">{title}</p>' if title else ""
     )
-    style = f' style="min-height:{height}px;"' if height else ""
     container_kw = {"height": height, "border": False} if height else {"border": False}
     with st.container(**container_kw):
         st.markdown(
-            f'<div class="smile-panel"{style}>{title_html}',
+            f'<div class="smile-panel">{title_html}',
             unsafe_allow_html=True,
         )
         yield

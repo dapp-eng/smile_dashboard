@@ -35,6 +35,11 @@ def get_sync_mismatch():
     return metrics.get_sync_mismatch(student_all, status_student)
 
 
+def get_stale_sync():
+    status_student = load_csv_table("status_student")
+    return metrics.get_stale_sync(status_student)
+
+
 def get_orphaned_tracking():
     tracking_student = load_csv_table("tracking_student")
     student_all = load_csv_table("student_all")

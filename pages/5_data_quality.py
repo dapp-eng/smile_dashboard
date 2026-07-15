@@ -5,9 +5,9 @@ from utils.layout import (
     page_header, metric_strip, chart_panel,
     filter_bar, table_panel, panel, card_grid, section_divider,
 )
-from utils.theme import COLORS
+from utils.theme import COLORS, apply_style
 from utils.queries import (
-    get_sync_mismatch, get_orphaned_tracking,
+    get_sync_mismatch, get_stale_sync, get_orphaned_tracking,
     get_denorm_inconsistencies, get_all_table_counts,
 )
 from utils import charts
@@ -18,16 +18,18 @@ page_header(
     "BT-08 — Data Sync & Integrity Checks",
     page_title="Data Quality | SMILE",
 )
+apply_style()
 
 # Load data
 df_sync = get_sync_mismatch()
+df_stale = get_stale_sync()
 df_orphan = get_orphaned_tracking()
 df_denorm = get_denorm_inconsistencies()
 table_counts = get_all_table_counts()
 
 total_students = table_counts.get("student_all", 0)
 total_status = table_counts.get("status_student", 0)
-total_issues = len(df_sync) + len(df_orphan) + len(df_denorm)
+total_issues = len(df_sync) + len(df_stale) + len(df_orphan) + len(df_denorm)
 
 synced_count = total_students - len(
     df_sync[df_sync["mismatch_type"] == "missing_in_status_student"]
@@ -55,6 +57,11 @@ metric_strip([
         "label": "Orphaned Records",
         "value": len(df_orphan),
         "sentiment": "success" if len(df_orphan) == 0 else "danger",
+    },
+    {
+        "label": "Stale Sync",
+        "value": len(df_stale),
+        "sentiment": "success" if len(df_stale) == 0 else "warning",
     },
     {
         "label": "Denorm Issues",
@@ -158,14 +165,54 @@ with col_right:
             )
             st.plotly_chart(fig, use_container_width=True)
 
-# Row counts table
+# Stale sync chart + row counts
 section_divider()
 
-with panel("Table Row Counts"):
-    df_counts = pd.DataFrame(
-        [{"Table": t, "Rows": c} for t, c in table_counts.items()]
-    ).sort_values("Rows", ascending=False)
-    st.dataframe(df_counts, use_container_width=True, hide_index=True)
+col_stale, col_counts = card_grid(2)
+
+with col_stale:
+    with chart_panel("Sync Staleness Distribution", height=380):
+        if df_stale.empty:
+            st.info("All records synced within 90 days of latest sync date.")
+        else:
+            stale_counts = (
+                df_stale["staleness"]
+                .value_counts()
+                .reindex(["stale", "very_stale", "critical"], fill_value=0)
+                .reset_index()
+            )
+            stale_counts.columns = ["staleness", "count"]
+            color_map = {
+                "stale": COLORS["warning"],
+                "very_stale": COLORS["danger"],
+                "critical": COLORS["neutral"],
+            }
+            import plotly.express as px
+            fig = px.bar(
+                stale_counts,
+                x="staleness",
+                y="count",
+                color="staleness",
+                color_discrete_map=color_map,
+                text="count",
+                height=300,
+            )
+            fig.update_traces(textposition="outside")
+            fig.update_layout(
+                xaxis_title="",
+                yaxis_title="Records",
+                showlegend=False,
+                margin=dict(t=10, b=10, l=10, r=10),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption(">90d = stale, >180d = very stale, >365d = critical (relative to latest sync date in dataset)")
+
+with col_counts:
+    with panel("Table Row Counts"):
+        df_counts = pd.DataFrame(
+            [{"Table": t, "Rows": c} for t, c in table_counts.items()]
+        ).sort_values("Rows", ascending=False)
+        st.dataframe(df_counts, use_container_width=True, hide_index=True)
 
 # Detail: sync mismatches
 section_divider()
@@ -184,18 +231,37 @@ with table_panel("Detail - Sync Mismatches (student_all / status_student)", heig
         st.dataframe(filtered, use_container_width=True, hide_index=True)
         st.caption(f"Showing {len(filtered)} of {len(df_sync)} mismatch(es)")
 
+# Detail: stale sync records
+with table_panel("Detail - Stale Sync Records", height=400):
+    if df_stale.empty:
+        st.info("No stale sync records found.")
+    else:
+        stale_filter = st.multiselect(
+            "Filter by staleness",
+            options=["stale", "very_stale", "critical", "ok"],
+            default=df_stale["staleness"].unique().tolist(),
+            key="stale_filter",
+        )
+        filtered = df_stale[df_stale["staleness"].isin(stale_filter)]
+        display_cols = [
+            c for c in ["NIM", "nama", "program_studi", "status", "sync_date", "days_since_sync", "staleness"]
+            if c in filtered.columns
+        ]
+        st.dataframe(filtered[display_cols].sort_values("days_since_sync", ascending=False), use_container_width=True, hide_index=True)
+        st.caption(f"Showing {len(filtered)} of {len(df_stale)} stale record(s)")
+
 # Detail: orphaned records
 with table_panel("Detail - Orphaned tracking_student Records", height=400):
     if df_orphan.empty:
         st.info("No orphaned tracking_student rows found.")
     else:
         display_cols = [
-            c for c in ["id_tracking_student", "nim", "student_name",
+            c for c in ["id_tracking_student", "NIM", "student_name",
                          "company", "position", "progress_student", "last_update"]
             if c in df_orphan.columns
         ]
         st.dataframe(df_orphan[display_cols], use_container_width=True, hide_index=True)
-        st.caption(f"{len(df_orphan)} orphaned row(s) — nim not found in student_all")
+        st.caption(f"{len(df_orphan)} orphaned row(s) - NIM not found in student_all")
 
 # Detail: denormalization inconsistencies
 with table_panel("Detail - Denormalization Inconsistencies", height=400):
