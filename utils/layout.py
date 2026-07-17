@@ -1,157 +1,309 @@
 import streamlit as st
 from contextlib import contextmanager
-from utils.theme import COLORS
 
-# CSS injection (call once per page via page_header)
+# CSS for the SMILE dashboard
 
 _LAYOUT_CSS = """
 <style>
-/* ── Global chrome cleanup ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800;900&display=swap');
+
+/* chrome cleanup */
 #MainMenu, footer {visibility: hidden;}
 
-/* ── Metric card base ── */
-div[data-testid="stMetric"] {
-    background: var(--secondary-background-color);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 16px 20px;
+/* main content spacing */
+.block-container {
+    padding-top: 1rem !important;
+    padding-bottom: 4rem !important;
+}
+/* sidebar top padding */
+section[data-testid="stSidebar"] > div:first-child {
+    padding-top: 1rem;
 }
 
-/* ── Panel: bordered container with title ── */
+/* KPI card */
+.smile-metric-card {
+    background: var(--secondary-background-color);
+    border: 1px solid var(--border-color, #E2E8F0);
+    border-radius: 16px;
+    padding: 20px 14px 16px;
+    text-align: center;
+    min-height: 110px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow:
+        0 1px 3px rgba(0,0,0,0.04),
+        0 4px 6px rgba(0,0,0,0.03),
+        0 8px 24px rgba(30,58,138,0.04);
+    transition: transform 0.25s cubic-bezier(.4,0,.2,1), box-shadow 0.25s cubic-bezier(.4,0,.2,1);
+    position: relative;
+    overflow: hidden;
+}
+.smile-metric-card:hover {
+    transform: translateY(-3px);
+    box-shadow:
+        0 4px 6px rgba(0,0,0,0.05),
+        0 10px 20px rgba(0,0,0,0.04),
+        0 20px 40px rgba(52,98,237,0.08);
+}
+.smile-metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #3462ED, #4748B0);
+    border-radius: 16px 16px 0 0;
+}
+
+/* KPI text - label small, value large and single-line */
+.smile-metric-card .smile-metric-label,
+p.smile-metric-label {
+    font-family: 'Inter', sans-serif !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    color: var(--text-color) !important;
+    opacity: 0.5;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 0 0 8px 0 !important;
+    line-height: 1.3 !important;
+    white-space: nowrap;
+}
+.smile-metric-card .smile-metric-value,
+p.smile-metric-value {
+    font-family: 'Montserrat', sans-serif !important;
+    font-size: 22px !important;
+    font-weight: 800 !important;
+    color: var(--text-color) !important;
+    margin: 0 !important;
+    line-height: 1.1 !important;
+    white-space: nowrap;
+    animation: smileValueReveal 0.7s cubic-bezier(.4,0,.2,1);
+}
+
+/* delta badges */
+.smile-delta {
+    display: inline-block;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 20px;
+    margin-top: 6px;
+    letter-spacing: 0.02em;
+}
+.smile-delta-success { background: rgba(16,185,129,0.12); color: #10B981; }
+.smile-delta-danger { background: rgba(239,68,68,0.12); color: #EF4444; }
+.smile-delta-warning { background: rgba(212,167,44,0.12); color: #D4A72C; }
+.smile-delta-neutral { background: rgba(110,119,129,0.12); color: #6E7781; }
+
+/* -- Panel / Card — raised container -- */
 .smile-panel {
     background: var(--secondary-background-color);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 20px 24px 16px;
-    height: 100%;
-    box-sizing: border-box;
+    border: 1px solid var(--border-color, #E2E8F0);
+    border-radius: 16px;
+    padding: 24px 28px 20px;
+    margin-bottom: 16px;
+    overflow: auto;
+    box-shadow:
+        0 1px 3px rgba(0,0,0,0.04),
+        0 4px 6px rgba(0,0,0,0.03);
+    transition: box-shadow 0.25s ease;
+}
+.smile-panel:hover {
+    box-shadow:
+        0 4px 8px rgba(0,0,0,0.06),
+        0 12px 24px rgba(0,0,0,0.04);
 }
 .smile-panel-title {
     font-family: 'Montserrat', sans-serif;
     font-weight: 700;
     font-size: 15px;
     color: var(--text-color);
-    margin: 0 0 12px 0;
-    letter-spacing: 0.02em;
+    margin: 0 0 16px 0;
+    letter-spacing: 0.01em;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border-color, #E2E8F0);
 }
 
-/* ── Filter bar (lighter, top strip) ── */
+/* -- Filter bar -- */
 .smile-filter-bar {
     background: var(--secondary-background-color);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 16px 24px;
-    margin-bottom: 16px;
+    border: 1px solid var(--border-color, #E2E8F0);
+    border-radius: 16px;
+    padding: 20px 28px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
 }
 
-/* ── Section divider ── */
-.smile-divider {
-    border: none;
-    border-top: 1px solid var(--border-color);
-    margin: 24px 0 20px;
-}
-
-/* ── Delta badges inside metric_strip ── */
-.smile-delta {
-    display: inline-block;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 6px;
-    margin-top: 4px;
-}
-.smile-delta-success {
-    background: rgba(16, 185, 129, 0.12);
-    color: #10B981;
-}
-.smile-delta-danger {
-    background: rgba(239, 68, 68, 0.12);
-    color: #EF4444;
-}
-.smile-delta-warning {
-    background: rgba(212, 167, 44, 0.12);
-    color: #d4a72c;
-}
-.smile-delta-neutral {
-    background: rgba(110, 119, 129, 0.12);
-    color: #6e7781;
-}
-
-/* ── Metric strip cards ── */
-.smile-metric-card {
-    background: var(--secondary-background-color);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 18px 20px 14px;
-    text-align: center;
-}
-.smile-metric-label {
-    font-family: 'Inter', sans-serif;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-color);
-    opacity: 0.65;
-    margin: 0 0 6px 0;
-    letter-spacing: 0.03em;
-}
-.smile-metric-value {
-    font-family: 'Montserrat', sans-serif;
-    font-size: 28px;
-    font-weight: 800;
-    color: var(--text-color);
-    margin: 0;
-    line-height: 1.2;
-}
-
-/* ── Page header ── */
+/* -- Page header -- */
 .smile-page-header {
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 .smile-page-header h1 {
     font-family: 'Montserrat', sans-serif;
     font-weight: 800;
+    font-size: 28px;
     margin-bottom: 0;
+    background: linear-gradient(135deg, #3462ED 0%, #4748B0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 .smile-page-caption {
     font-family: 'Inter', sans-serif;
-    font-size: 14px;
+    font-size: 13px;
     color: var(--text-color);
-    opacity: 0.55;
+    opacity: 0.5;
     margin-top: 2px;
-    margin-bottom: 20px;
+    margin-bottom: 24px;
 }
+
+/* section divider */
+.smile-divider {
+    border: none;
+    border-top: 1px solid var(--border-color, #E2E8F0);
+    margin: 32px 0 20px;
+}
+
+/* validation status badges */
+.smile-check-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 10px;
+    margin-bottom: 4px;
+}
+.smile-check-passed { background: rgba(16,185,129,0.12); color: #10B981; }
+.smile-check-failed { background: rgba(239,68,68,0.12); color: #EF4444; }
+
+/* sidebar dark background */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #121F45 0%, #0D1733 100%) !important;
+}
+
+/* sidebar text white on dark */
+section[data-testid="stSidebar"],
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] span,
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] .stMarkdown p,
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
+    color: rgba(255,255,255,0.85) !important;
+}
+section[data-testid="stSidebar"] .sidebar-brand { padding: 4px 0 8px; text-align: left; }
+section[data-testid="stSidebar"] .sidebar-divider {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    margin: 12px 0 8px;
+}
+section[data-testid="stSidebar"] .sidebar-version {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    color: rgba(255,255,255,0.3) !important;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+}
+section[data-testid="stSidebar"] .sidebar-info {
+    font-family: 'Inter', sans-serif;
+    margin-top: 4px;
+    padding: 14px 16px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.06);
+}
+/* collapse the stMarkdown wrapper gap above sidebar-info */
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"]:has(.sidebar-info) {
+    margin-top: -8px;
+}
+section[data-testid="stSidebar"] .sidebar-info-title {
+    font-size: 9px !important;
+    font-weight: 700 !important;
+    color: rgba(255,255,255,0.35) !important;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin: 0 0 8px 0 !important;
+}
+section[data-testid="stSidebar"] .sidebar-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px !important;
+    color: rgba(255,255,255,0.6) !important;
+    margin: 4px 0 !important;
+    line-height: 1.4 !important;
+}
+section[data-testid="stSidebar"] .sidebar-info-value {
+    color: rgba(255,255,255,0.85) !important;
+    font-weight: 600;
+}
+/* sidebar logo size */
+section[data-testid="stSidebar"] img[data-testid="stLogo"] {
+    max-height: 80px !important;
+    width: auto !important;
+}
+
+/* sidebar nav items */
+section[data-testid="stSidebar"] nav a {
+    border-radius: 8px !important;
+    transition: background 0.2s ease, transform 0.15s ease !important;
+    margin-bottom: 2px !important;
+}
+section[data-testid="stSidebar"] nav a span,
+section[data-testid="stSidebar"] nav a p {
+    color: rgba(255,255,255,0.85) !important;
+}
+section[data-testid="stSidebar"] nav a:hover {
+    background: rgba(52,98,237,0.12) !important;
+    transform: translateX(2px);
+}
+section[data-testid="stSidebar"] nav a[aria-selected="true"],
+section[data-testid="stSidebar"] nav a[aria-current="page"] {
+    background: rgba(52,98,237,0.2) !important;
+    border-left: 3px solid #3462ED !important;
+}
+
+/* animations */
+@keyframes smileValueReveal {
+    from { opacity: 0; transform: translateY(12px) scale(0.9); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes smileCardFadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.smile-panel { animation: smileCardFadeIn 0.5s ease-out; }
+
+/* widget overrides */
+div[data-testid="stMetric"] {
+    background: var(--secondary-background-color);
+    border: 1px solid var(--border-color, #E2E8F0);
+    border-radius: 16px;
+    padding: 16px 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+div[data-baseweb="select"] { border-radius: 10px !important; }
+div[data-testid="stDataFrame"] { border-radius: 12px; overflow: hidden; }
 </style>
 """
 
-_css_injected = False
+
+def inject_global_css():
+    # inject CSS once per page render
+    st.markdown(_LAYOUT_CSS, unsafe_allow_html=True)
 
 
-def _inject_css():
-    """Inject layout CSS once per page render."""
-    global _css_injected
-    if not _css_injected:
-        st.markdown(_LAYOUT_CSS, unsafe_allow_html=True)
-        _css_injected = True
+# page-level helpers
 
-
-# Page-level helpers
-
-def page_header(title: str, caption: str = "", *, page_title: str = None):
-    """
-    Call at the very top of every page.
-    Sets page_config, injects CSS, and renders a styled header.
-
-    Parameters
-    ----------
-    title : str       — visible H1 on the page
-    caption : str     — subtext (BT codes, owner, etc.)
-    page_title : str  — browser tab title (defaults to `title`)
-    """
-    st.set_page_config(
-        page_title=page_title or title,
-        layout="wide",
-    )
-    _inject_css()
+def page_header(title, caption="", *, page_title=None):
+    # page title + optional caption with gradient heading style
+    inject_global_css()
     st.markdown(
         f'<div class="smile-page-header"><h1>{title}</h1></div>',
         unsafe_allow_html=True,
@@ -164,113 +316,55 @@ def page_header(title: str, caption: str = "", *, page_title: str = None):
 
 
 def section_divider():
-    """Themed horizontal rule between dashboard sections."""
+    # thin horizontal rule between sections
     st.markdown('<hr class="smile-divider">', unsafe_allow_html=True)
 
 
-# Container primitives (Tableau-style zones)
+# container primitives
 
 @contextmanager
 def filter_bar():
-    """
-    Top-level filter strip. Put st.columns / selectboxes inside.
-
-    Usage:
-        with filter_bar():
-            c1, c2, c3 = st.columns(3)
-            with c1: st.selectbox(...)
-    """
-    with st.container():
-        st.markdown('<div class="smile-filter-bar">', unsafe_allow_html=True)
-        yield
-        st.markdown('</div>', unsafe_allow_html=True)
+    # filter section wrapper - no border, plain flow
+    yield
 
 
 @contextmanager
-def chart_panel(title: str = "", height: int = 420):
-    """
-    Bordered panel for a chart, fixed pixel height.
-
-    Usage:
-        with chart_panel("Revenue Trend", height=400):
-            st.plotly_chart(fig, use_container_width=True)
-    """
-    title_html = (
-        f'<p class="smile-panel-title">{title}</p>' if title else ""
-    )
-    with st.container(height=height, border=False):
+def chart_panel(title="", height=420):
+    # chart container with optional title
+    if title:
         st.markdown(
-            f'<div class="smile-panel">{title_html}',
+            f'<p class="smile-panel-title" style="margin-bottom:12px;">{title}</p>',
             unsafe_allow_html=True,
         )
-        yield
-        st.markdown('</div>', unsafe_allow_html=True)
+    yield
 
 
 @contextmanager
-def table_panel(title: str = "", height: int = 380):
-    """
-    Bordered panel for a dataframe / table view, fixed pixel height.
-
-    Usage:
-        with table_panel("Student Detail", height=350):
-            st.dataframe(df, use_container_width=True)
-    """
-    title_html = (
-        f'<p class="smile-panel-title">{title}</p>' if title else ""
-    )
-    with st.container(height=height, border=False):
+def table_panel(title="", height=380):
+    # table/dataframe container with optional title
+    if title:
         st.markdown(
-            f'<div class="smile-panel">{title_html}',
+            f'<p class="smile-panel-title" style="margin-bottom:12px;">{title}</p>',
             unsafe_allow_html=True,
         )
-        yield
-        st.markdown('</div>', unsafe_allow_html=True)
+    yield
 
 
 @contextmanager
-def panel(title: str = "", height: int = None):
-    """
-    Generic bordered panel. Height optional (auto if omitted).
-
-    Usage:
-        with panel("Notes"):
-            st.write("...")
-    """
-    title_html = (
-        f'<p class="smile-panel-title">{title}</p>' if title else ""
-    )
-    container_kw = {"height": height, "border": False} if height else {"border": False}
-    with st.container(**container_kw):
+def panel(title="", height=None):
+    # generic panel wrapper
+    if title:
         st.markdown(
-            f'<div class="smile-panel">{title_html}',
+            f'<p class="smile-panel-title" style="margin-bottom:12px;">{title}</p>',
             unsafe_allow_html=True,
         )
-        yield
-        st.markdown('</div>', unsafe_allow_html=True)
+    yield
 
 
-# Metric strip (row of KPI cards)
+# metric strip
 
-def metric_strip(items: list[dict]):
-    """
-    Render a row of KPI metric cards (Tableau summary-strip style).
-
-    Parameters
-    ----------
-    items : list of dict, each with keys:
-        - label  (str)  : metric name, e.g. "Total Students"
-        - value  (str|int|float) : main number
-        - delta  (str, optional) : e.g. "+12%", "-3pp"
-        - sentiment (str, optional): "success"|"danger"|"warning"|"neutral"
-
-    Usage:
-        metric_strip([
-            {"label": "Placed", "value": 320, "delta": "+8%", "sentiment": "success"},
-            {"label": "Ghosting", "value": 14, "delta": "+2", "sentiment": "danger"},
-            {"label": "Pending", "value": 56},
-        ])
-    """
+def metric_strip(items):
+    # KPI row - all cards equal height, value font dominant over label
     cols = st.columns(len(items))
     for col, item in zip(cols, items):
         label = item["label"]
@@ -289,27 +383,57 @@ def metric_strip(items: list[dict]):
             st.markdown(
                 f"""
                 <div class="smile-metric-card">
-                    <p class="smile-metric-label">{label}</p>
-                    <p class="smile-metric-value">{value}</p>
+                    <div style="font-family:'Inter',sans-serif;font-size:10px;font-weight:600;
+                        text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;
+                        margin:0 0 6px 0;line-height:1.3;color:inherit;
+                        white-space:nowrap;overflow:hidden;">{label}</div>
+                    <div style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:800;
+                        line-height:1.1;margin:0;color:inherit;
+                        white-space:nowrap;overflow:hidden;">{value}</div>
                     {delta_html}
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
+# backward compat alias
+animated_metric_strip = metric_strip
 
-# Card grid (multi-column layout helper)
 
-def card_grid(n_cols: int = 2):
-    """
-    Return a list of st.columns for a card grid layout.
-
-    Usage:
-        cols = card_grid(3)
-        with cols[0]:
-            with chart_panel("Chart A", height=350):
-                st.plotly_chart(fig1, use_container_width=True)
-        with cols[1]:
-            ...
-    """
+# card grid helper
+def card_grid(n_cols=2):
     return st.columns(n_cols, gap="medium")
+
+
+# sidebar helpers
+
+def render_sidebar_brand():
+    # Logo rendered via st.logo (called in app.py), this is a no-op fallback
+    pass
+
+
+def render_sidebar_footer():
+    # Info panel + version tag shown below nav menu
+    with st.sidebar:
+        st.markdown(
+            '<div class="sidebar-info">'
+            '<p class="sidebar-info-title">Data Source</p>'
+            '<div class="sidebar-info-row">'
+            '<span>Tables</span>'
+            '<span class="sidebar-info-value">6 tables</span>'
+            '</div>'
+            '<div class="sidebar-info-row">'
+            '<span>Storage</span>'
+            '<span class="sidebar-info-value">CSV + Supabase</span>'
+            '</div>'
+            '<div class="sidebar-info-row">'
+            '<span>Sync</span>'
+            '<span class="sidebar-info-value">Auto</span>'
+            '</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<p class="sidebar-version">SMILE v1.0  |  SSDC 2026</p>',
+            unsafe_allow_html=True,
+        )

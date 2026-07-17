@@ -145,4 +145,4 @@ def get_quality_master_data(student_all: pd.DataFrame, status_student: pd.DataFr
     df.loc[diff_prog, "mismatch_types"] += "ProgStudi, "
     df["mismatch_types"] = df["mismatch_types"].str.rstrip(", ")
     
-    return df
+    return df

@@ -3,20 +3,20 @@ import pandas as pd
 import plotly.express as px
 
 from utils.layout import (
-    page_header, metric_strip, chart_panel,
+    inject_global_css, page_header, metric_strip, chart_panel,
     filter_bar, table_panel, panel, card_grid, section_divider,
 )
-from utils.theme import COLORS, apply_style
+from utils.theme import COLORS
 from utils import charts
 from utils.queries import get_data_quality_master
 
 # Page setup
+inject_global_css()
 page_header(
     "Data Quality",
     "BT-08 — Data Sync & Integrity Checks",
     page_title="Data Quality | SMILE",
 )
-apply_style()
 
 # Load Data
 df_master = get_data_quality_master()
@@ -137,10 +137,8 @@ col_sem, col_prog = st.columns([1, 1], gap="medium")
 with col_sem:
     with chart_panel("Staleness by Semester", height=420):
         df_master["semester_status"] = df_master["semester_status"].fillna("Unknown").astype(str)
-        # Sort semesters logically if they are numeric strings
         sorted_sems = sorted(df_master["semester_status"].unique(), key=lambda x: int(float(x)) if x.replace('.','',1).isdigit() else 999)
         
-        # Pre-aggregate data for bar chart
         sem_counts = df_master.groupby(["semester_status", "staleness"]).size().reset_index(name="count")
 
         fig_sem = charts.bar(
@@ -163,10 +161,8 @@ with col_sem:
 
 with col_prog:
     with chart_panel("Staleness by Program Studi", height=420):
-        # Program Studi is categorical, sort by value counts
         prog_order = df_master["program_studi_status"].value_counts().index.tolist()
         
-        # Pre-aggregate data for bar chart
         prog_counts = df_master.groupby(["program_studi_status", "staleness"]).size().reset_index(name="count")
         
         fig_prog = charts.bar(

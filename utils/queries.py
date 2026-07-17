@@ -40,3 +40,13 @@ def get_all_table_counts():
     tables = ["student_all", "status_student", "tracking_student",
               "tracking_company", "company", "talent_request"]
     return {t: len(load_csv_table(t)) for t in tables}
+
+
+# company monitoring queries
+def get_company_monitoring_data():
+    return {
+        "company": load_csv_table("company"),
+        "tracking_company": load_csv_table("tracking_company"),
+        "talent_request": load_csv_table("talent_request"),
+        "tracking_student": load_csv_table("tracking_student"),
+    }
