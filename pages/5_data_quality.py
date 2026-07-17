@@ -1,16 +1,14 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 from utils.layout import (
     page_header, metric_strip, chart_panel,
     filter_bar, table_panel, panel, card_grid, section_divider,
 )
-from utils.theme import COLORS
-from utils.queries import (
-    get_sync_mismatch, get_orphaned_tracking,
-    get_denorm_inconsistencies, get_all_table_counts,
-)
+from utils.theme import COLORS, apply_style
 from utils import charts
+from utils.queries import get_data_quality_master
 
 # Page setup
 page_header(
@@ -18,199 +16,206 @@ page_header(
     "BT-08 — Data Sync & Integrity Checks",
     page_title="Data Quality | SMILE",
 )
+apply_style()
 
-# Load data
-df_sync = get_sync_mismatch()
-df_orphan = get_orphaned_tracking()
-df_denorm = get_denorm_inconsistencies()
-table_counts = get_all_table_counts()
+# Load Data
+df_master = get_data_quality_master()
 
-total_students = table_counts.get("student_all", 0)
-total_status = table_counts.get("status_student", 0)
-total_issues = len(df_sync) + len(df_orphan) + len(df_denorm)
+if df_master.empty:
+    st.info("No data available for sync evaluation.")
+    st.stop()
 
-synced_count = total_students - len(
-    df_sync[df_sync["mismatch_type"] == "missing_in_status_student"]
-) if not df_sync.empty else total_students
+# Row 2: Earliest / Latest Sync Date
+earliest_sync = df_master["sync_date"].min()
+latest_sync = df_master["sync_date"].max()
 
-# Metric strip
-sync_pct = round(synced_count / total_students * 100, 1) if total_students else 0
+c1, c2 = card_grid(2)
+with c1:
+    with panel():
+        st.markdown(f"<div style='text-align: center; color: var(--text-color); font-size: 0.9rem;'>Earliest Sync Date</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: center; font-size: 1.5rem; font-weight: 600; color: var(--primary-color);'>{earliest_sync.strftime('%d %B %Y')}</div>", unsafe_allow_html=True)
+with c2:
+    with panel():
+        st.markdown(f"<div style='text-align: center; color: var(--text-color); font-size: 0.9rem;'>Latest Sync Date</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: center; font-size: 1.5rem; font-weight: 600; color: var(--primary-color);'>{latest_sync.strftime('%d %B %Y')}</div>", unsafe_allow_html=True)
+
+section_divider()
+
+# Row 3: Metric Strip
+total_students = len(df_master)
+pct_critical = round(len(df_master[df_master["staleness"] == "Critical"]) / total_students * 100, 1)
+pct_mismatch = round(df_master["has_mismatch"].sum() / total_students * 100, 1)
+
 metric_strip([
     {
         "label": "Total Students",
         "value": f"{total_students:,}",
     },
     {
-        "label": "Synced Records",
-        "value": f"{synced_count:,}",
-        "delta": f"{sync_pct}%",
-        "sentiment": "success" if sync_pct >= 95 else "warning" if sync_pct >= 80 else "danger",
+        "label": "Critical Sync Data (>179d)",
+        "value": f"{pct_critical}%",
+        "sentiment": "success" if pct_critical < 10 else "danger",
     },
     {
-        "label": "Sync Mismatches",
-        "value": len(df_sync),
-        "sentiment": "success" if len(df_sync) == 0 else "danger",
-    },
-    {
-        "label": "Orphaned Records",
-        "value": len(df_orphan),
-        "sentiment": "success" if len(df_orphan) == 0 else "danger",
-    },
-    {
-        "label": "Denorm Issues",
-        "value": len(df_denorm),
-        "sentiment": "success" if len(df_denorm) == 0 else "warning",
-    },
+        "label": "Mismatched Data",
+        "value": f"{pct_mismatch}%",
+        "sentiment": "success" if pct_mismatch < 5 else "warning",
+    }
 ])
 
-# Charts row
 section_divider()
 
-col_left, col_right = card_grid(2)
+STALENESS_COLORS = {
+    "Safe": COLORS["success"],
+    "Stale": COLORS["warning"],
+    "Critical": COLORS["danger"]
+}
 
-# Donut: mismatch type breakdown
-with col_left:
-    with chart_panel("Sync Mismatch Breakdown", height=420):
-        if df_sync.empty:
-            st.info("No sync mismatches detected.")
-        else:
-            mismatch_counts = (
-                df_sync["mismatch_type"]
-                .value_counts()
-                .reset_index()
-                .rename(columns={"index": "mismatch_type", "mismatch_type": "type", "count": "count"})
-            )
-            # Ensure column names are correct after value_counts
-            if "type" in mismatch_counts.columns:
-                mismatch_counts.columns = ["type", "count"]
-            else:
-                mismatch_counts.columns = ["type", "count"]
+# Row 4: Histogram and Pie Chart
+col_hist, col_pie = st.columns([3, 2], gap="medium")
 
-            color_map = {
-                "missing_in_status_student": COLORS["danger"],
-                "missing_in_student_all": COLORS["warning"],
-                "name_mismatch": COLORS["secondary"],
-            }
-            import plotly.express as px
-            fig = px.pie(
-                mismatch_counts,
-                names="type",
-                values="count",
-                hole=0.5,
-                color="type",
-                color_discrete_map=color_map,
-                height=340,
-            )
-            fig.update_traces(
-                textinfo="label+value",
-                textposition="outside",
-            )
-            fig.update_layout(
-                showlegend=False,
-                margin=dict(t=10, b=10, l=10, r=10),
-            )
-            st.plotly_chart(fig, use_container_width=True)
+with col_hist:
+    with chart_panel("Days Since Last Sync", height=380):
+        fig_hist = charts.histogram(
+            df_master, 
+            x="days_since_sync", 
+            color="staleness",
+            color_discrete_map=STALENESS_COLORS,
+            height=300
+        )
+        fig_hist.update_traces(xbins_size=30, marker_line_color="var(--background-color)", marker_line_width=0.5)
+        fig_hist.update_layout(
+            margin=dict(l=10, r=10, t=10, b=10),
+            xaxis_title="Days Since Sync",
+            yaxis_title="Count of Students",
+            legend_title="",
+            bargap=0.02 
+        )
+        st.plotly_chart(fig_hist, use_container_width=True)
 
-# Bar: issue count by table
-with col_right:
-    with chart_panel("Issues by Table", height=420):
-        issue_summary = []
-        if not df_sync.empty:
-            issue_summary.append({"table": "student_all / status_student", "issues": len(df_sync), "type": "Sync Mismatch"})
-        if not df_orphan.empty:
-            issue_summary.append({"table": "tracking_student", "issues": len(df_orphan), "type": "Orphaned Record"})
-        if not df_denorm.empty:
-            for tbl, grp in df_denorm.groupby("table"):
-                issue_summary.append({"table": tbl, "issues": len(grp), "type": "Denorm Mismatch"})
+with col_pie:
+    with chart_panel("Staleness Distribution", height=380):
+        df_pie = df_master["staleness"].value_counts().reset_index()
+        df_pie.columns = ["staleness", "count"]
+        
+        fig_pie = charts.pie(
+            df_pie,
+            names="staleness",
+            values="count",
+            color="staleness",
+            color_discrete_map=STALENESS_COLORS,
+            hole=0.4,
+            height=300
+        )
+        fig_pie.update_traces(textinfo="label+percent", textposition="inside")
+        fig_pie.update_layout(margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+        st.plotly_chart(fig_pie, use_container_width=True)
 
-        if not issue_summary:
-            st.info("No data quality issues detected.")
-        else:
-            df_issues = pd.DataFrame(issue_summary)
-            color_map = {
-                "Sync Mismatch": COLORS["danger"],
-                "Orphaned Record": COLORS["warning"],
-                "Denorm Mismatch": COLORS["secondary"],
-            }
-            import plotly.express as px
-            fig = px.bar(
-                df_issues,
-                x="table",
-                y="issues",
-                color="type",
-                color_discrete_map=color_map,
-                text="issues",
-                height=340,
-            )
-            fig.update_traces(textposition="outside")
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title="Issue Count",
-                xaxis_tickangle=-20,
-                margin=dict(t=10, b=10, l=10, r=10),
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.02,
-                    xanchor="right",
-                    x=1,
-                ),
-            )
-            st.plotly_chart(fig, use_container_width=True)
+# Row 5: Line chart for monthly sync
+with chart_panel("Monthly Sync Volume", height=380):
+    df_sync_time = df_master.copy()
+    df_sync_time["sync_month"] = df_sync_time["sync_date"].dt.to_period("M").astype(str)
+    monthly_counts = df_sync_time.groupby("sync_month").size().reset_index(name="syncs")
+    
+    fig_line = charts.line(
+        monthly_counts, 
+        x="sync_month", 
+        y="syncs", 
+        height=300
+    )
+    fig_line.update_traces(line_color=COLORS["primary"], marker=dict(size=8))
+    fig_line.update_layout(
+        margin=dict(l=10, r=10, t=10, b=10),
+        xaxis_title="Month",
+        yaxis_title="Number of Syncs"
+    )
+    st.plotly_chart(fig_line, use_container_width=True)
 
-# Row counts table
+# Row 6: Stacked Bar Charts (Semester and Program Studi)
+col_sem, col_prog = st.columns([1, 1], gap="medium")
+
+with col_sem:
+    with chart_panel("Staleness by Semester", height=420):
+        df_master["semester_status"] = df_master["semester_status"].fillna("Unknown").astype(str)
+        # Sort semesters logically if they are numeric strings
+        sorted_sems = sorted(df_master["semester_status"].unique(), key=lambda x: int(float(x)) if x.replace('.','',1).isdigit() else 999)
+        
+        # Pre-aggregate data for bar chart
+        sem_counts = df_master.groupby(["semester_status", "staleness"]).size().reset_index(name="count")
+
+        fig_sem = charts.bar(
+            sem_counts, 
+            x="semester_status", 
+            y="count",
+            color="staleness",
+            color_discrete_map=STALENESS_COLORS,
+            category_orders={"semester_status": sorted_sems},
+            barmode="stack",
+            height=340
+        )
+        fig_sem.update_layout(
+            margin=dict(l=10, r=10, t=10, b=10),
+            xaxis_title="Semester",
+            yaxis_title="Students",
+            legend_title=""
+        )
+        st.plotly_chart(fig_sem, use_container_width=True)
+
+with col_prog:
+    with chart_panel("Staleness by Program Studi", height=420):
+        # Program Studi is categorical, sort by value counts
+        prog_order = df_master["program_studi_status"].value_counts().index.tolist()
+        
+        # Pre-aggregate data for bar chart
+        prog_counts = df_master.groupby(["program_studi_status", "staleness"]).size().reset_index(name="count")
+        
+        fig_prog = charts.bar(
+            prog_counts, 
+            y="program_studi_status", 
+            x="count",
+            orientation="h",
+            color="staleness",
+            color_discrete_map=STALENESS_COLORS,
+            category_orders={"program_studi_status": prog_order},
+            barmode="stack",
+            height=340
+        )
+        fig_prog.update_layout(
+            margin=dict(l=10, r=10, t=10, b=10),
+            yaxis_title="",
+            xaxis_title="Students",
+            legend_title="",
+            xaxis_tickangle=0
+        )
+        st.plotly_chart(fig_prog, use_container_width=True)
+
 section_divider()
 
-with panel("Table Row Counts"):
-    df_counts = pd.DataFrame(
-        [{"Table": t, "Rows": c} for t, c in table_counts.items()]
-    ).sort_values("Rows", ascending=False)
-    st.dataframe(df_counts, use_container_width=True, hide_index=True)
-
-# Detail: sync mismatches
-section_divider()
-
-with table_panel("Detail - Sync Mismatches (student_all / status_student)", height=400):
-    if df_sync.empty:
-        st.info("No mismatches found between student_all and status_student.")
-    else:
-        type_filter = st.multiselect(
-            "Filter by mismatch type",
-            options=df_sync["mismatch_type"].unique().tolist(),
-            default=df_sync["mismatch_type"].unique().tolist(),
-            key="sync_filter",
-        )
-        filtered = df_sync[df_sync["mismatch_type"].isin(type_filter)]
-        st.dataframe(filtered, use_container_width=True, hide_index=True)
-        st.caption(f"Showing {len(filtered)} of {len(df_sync)} mismatch(es)")
-
-# Detail: orphaned records
-with table_panel("Detail - Orphaned tracking_student Records", height=400):
-    if df_orphan.empty:
-        st.info("No orphaned tracking_student rows found.")
-    else:
-        display_cols = [
-            c for c in ["id_tracking_student", "nim", "student_name",
-                         "company", "position", "progress_student", "last_update"]
-            if c in df_orphan.columns
-        ]
-        st.dataframe(df_orphan[display_cols], use_container_width=True, hide_index=True)
-        st.caption(f"{len(df_orphan)} orphaned row(s) — nim not found in student_all")
-
-# Detail: denormalization inconsistencies
-with table_panel("Detail - Denormalization Inconsistencies", height=400):
-    if df_denorm.empty:
-        st.info("No denormalization mismatches detected.")
-    else:
-        tbl_filter = st.multiselect(
-            "Filter by source table",
-            options=df_denorm["source_table"].unique().tolist(),
-            default=df_denorm["source_table"].unique().tolist(),
-            key="denorm_filter",
-        )
-        filtered = df_denorm[df_denorm["source_table"].isin(tbl_filter)]
-        st.dataframe(filtered, use_container_width=True, hide_index=True)
-        st.caption(
-            f"Showing {len(filtered)} of {len(df_denorm)} inconsistency(ies) — "
-            "duplicated columns disagree with their canonical FK source"
-        )
+# Row 7: Master Table
+with table_panel("Master Quality Data", height=500):
+    with filter_bar():
+        f1, f2 = st.columns(2)
+        with f1:
+            stale_filter = st.multiselect(
+                "Filter by Staleness", 
+                options=["Safe", "Stale", "Critical"], 
+                default=["Stale", "Critical"]
+            )
+        with f2:
+            mismatch_filter = st.checkbox("Show only records with mismatched data", value=False)
+            
+    filtered_df = df_master[df_master["staleness"].isin(stale_filter)]
+    if mismatch_filter:
+        filtered_df = filtered_df[filtered_df["has_mismatch"]]
+        
+    display_cols = [
+        "NIM", "nama_status", "program_studi_status", "sync_date", 
+        "days_since_sync", "staleness", "has_mismatch", "mismatch_types"
+    ]
+    
+    st.dataframe(
+        filtered_df[display_cols].sort_values("days_since_sync", ascending=False), 
+        use_container_width=True, 
+        hide_index=True
+    )
+    st.caption(f"Showing {len(filtered_df)} of {total_students} total records")
