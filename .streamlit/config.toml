@@ -9,12 +9,14 @@ showSidebarBorder = false
 
 # Warna chart
 chartCategoricalColors = [
-    "#3462ED", # primary
-    "#4748B0", # ungu
-    "#10B981", # hijau
-    "#EF4444", # merah
-    "#1E293B", # font
-    "#121F45", # navy
+    "#3462ED", # primary blue
+    "#4748B0", # purple
+    "#5B7FFF", # soft blue
+    "#1E3A8A", # dark blue
+    "#7C93ED", # periwinkle
+    "#2D3B87", # deep navy
+    "#818CF8", # lavender
+    "#6366F1", # indigo
 ]
 
 # Light mode

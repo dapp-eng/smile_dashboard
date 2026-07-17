@@ -1,11 +1,8 @@
 import pandas as pd
 
 
+# BT-06: eligible = Active status students joined with student_all
 def get_eligible_students(student_all: pd.DataFrame, status_student: pd.DataFrame) -> pd.DataFrame:
-    """
-    BT-06: Eligible students = status is Active.
-    Joins student_all with status_student on NIM.
-    """
     df = student_all.merge(status_student, on="NIM", how="inner", suffixes=("", "_status"))
     df = df[df["status"] == "Active"]
     return df[[
@@ -14,10 +11,8 @@ def get_eligible_students(student_all: pd.DataFrame, status_student: pd.DataFram
     ]]
 
 
+# BT-04: compare permintaan, dikirim, accepted, acceptance_rate, fulfillment_rate
 def get_tracking_company_summary(tracking_company: pd.DataFrame, tracking_student: pd.DataFrame) -> pd.DataFrame:
-    """
-    BT-04: Compare jumlah_permintaan, jumlah_dikirim, accepted, acceptance_rate, fulfillment_rate.
-    """
     accepted_counts = (
         tracking_student[tracking_student["progress_student"] == "Placement"]
         .groupby("id_tracking_company")
@@ -40,11 +35,8 @@ def get_tracking_company_summary(tracking_company: pd.DataFrame, tracking_studen
     return df
 
 
+# BT-05: flag ghosting - labeled (FU/Ghosting) and overdue-unlabeled by last_update
 def get_ghosting_flags(tracking_student: pd.DataFrame, today: pd.Timestamp = None) -> pd.DataFrame:
-    """
-    BT-05: Flag ghosting cases, both explicitly labeled (FU 1/2/3, Ghosting)
-    and overdue-but-unlabeled cases based on last_update.
-    """
     if today is None:
         today = pd.Timestamp.today().normalize()
 
@@ -73,16 +65,8 @@ def get_ghosting_flags(tracking_student: pd.DataFrame, today: pd.Timestamp = Non
     return df[df["ghosting_check"] != "ok"]
 
 
-# ─────────────────────────────────────────────
-#  BT-08: Data Quality / Sync Checks
-# ─────────────────────────────────────────────
-
+# BT-08: detect mismatches between student_all and status_student
 def get_sync_mismatch(student_all: pd.DataFrame, status_student: pd.DataFrame) -> pd.DataFrame:
-    """
-    BT-08: Detect mismatches between student_all and status_student.
-    Returns rows with mismatch_type: missing_in_status_student,
-    missing_in_student_all, or name_mismatch.
-    """
     df = student_all[["NIM", "nama"]].merge(
         status_student[["NIM", "nama"]],
         on="NIM",
@@ -105,19 +89,17 @@ def get_sync_mismatch(student_all: pd.DataFrame, status_student: pd.DataFrame) -
     return df
 
 
+# tracking_student rows whose NIM doesn't exist in student_all
 def get_orphaned_tracking(
     tracking_student: pd.DataFrame, student_all: pd.DataFrame
 ) -> pd.DataFrame:
-    """
-    Detect tracking_student rows whose NIM doesn't exist in student_all.
-    These are legacy FK violations from before constraint enforcement.
-    """
     valid_NIMs = set(student_all["NIM"])
     df = tracking_student.copy()
     df["is_orphan"] = ~df["NIM"].isin(valid_NIMs)
     return df[df["is_orphan"]].drop(columns=["is_orphan"])
 
 
+# detect denorm mismatches: duplicated FK columns disagree with canonical source
 def get_denorm_inconsistencies(
     tracking_student: pd.DataFrame,
     student_all: pd.DataFrame,
@@ -125,18 +107,9 @@ def get_denorm_inconsistencies(
     company: pd.DataFrame,
     talent_request: pd.DataFrame,
 ) -> pd.DataFrame:
-    """
-    Detect denormalization mismatches: duplicated columns reachable via FK
-    that disagree with their canonical source.
-
-    Checks:
-    1. tracking_student.student_name vs student_all.nama (via NIM)
-    2. tracking_company.nama_perusahaan vs company.company_name (via id_company)
-    3. tracking_company fields vs talent_request fields (via id_talent_req)
-    """
     issues = []
 
-    # Check 1: tracking_student.student_name vs student_all.nama
+    # tracking_student.student_name vs student_all.nama
     ts_sa = tracking_student[["id_tracking_student", "NIM", "student_name"]].merge(
         student_all[["NIM", "nama"]], on="NIM", how="inner"
     )
@@ -151,7 +124,7 @@ def get_denorm_inconsistencies(
             "source_table": "student_all",
         })
 
-    # Check 2: tracking_company.nama_perusahaan vs company.company_name
+    # tracking_company.nama_perusahaan vs company.company_name
     tc_co = tracking_company[["id_tracking_company", "id_company", "nama_perusahaan"]].merge(
         company[["id_company", "company_name"]], on="id_company", how="inner"
     )
@@ -166,7 +139,7 @@ def get_denorm_inconsistencies(
             "source_table": "company",
         })
 
-    # Check 3: tracking_company vs talent_request shared fields
+    # tracking_company vs talent_request shared fields
     shared_fields = [
         ("posisi", "nama_posisi"),
         ("jenis_penempatan", "jenis_penempatan"),
@@ -180,7 +153,6 @@ def get_denorm_inconsistencies(
     for tc_field, tr_field in shared_fields:
         col_tc = f"{tc_field}_tc" if tc_field == tr_field else tc_field
         col_tr = f"{tr_field}_tr" if tc_field == tr_field else tr_field
-        # Handle suffix naming from merge
         if col_tc not in tc_tr.columns:
             col_tc = tc_field
         if col_tr not in tc_tr.columns:

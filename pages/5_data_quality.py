@@ -1,11 +1,12 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 from utils.layout import (
-    page_header, metric_strip, chart_panel,
+    inject_global_css, page_header, metric_strip, chart_panel,
     filter_bar, table_panel, panel, card_grid, section_divider,
 )
-from utils.theme import COLORS
+from utils.theme import COLORS, CHART_PALETTE, apply_plotly_style
 from utils.queries import (
     get_sync_mismatch, get_orphaned_tracking,
     get_denorm_inconsistencies, get_all_table_counts,
@@ -13,10 +14,10 @@ from utils.queries import (
 from utils import charts
 
 # Page setup
+inject_global_css()
 page_header(
     "Data Quality",
-    "BT-08 — Data Sync & Integrity Checks",
-    page_title="Data Quality | SMILE",
+    "Pemeriksaan sinkronisasi dan integritas data",
 )
 
 # Load data
@@ -63,35 +64,101 @@ metric_strip([
     },
 ])
 
-# Charts row
+# validation summary section
 section_divider()
 
+# Validation status badges
+check_results = [
+    ("Sync Check", len(df_sync) == 0, f"{len(df_sync)} mismatch"),
+    ("Orphan Check", len(df_orphan) == 0, f"{len(df_orphan)} orphaned record"),
+    ("Denorm Check", len(df_denorm) == 0, f"{len(df_denorm)} inconsistency"),
+]
+
+status_html = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;">'
+for name, passed, detail in check_results:
+    badge_class = "smile-check-passed" if passed else "smile-check-failed"
+    icon = "&#10003;" if passed else "&#10007;"
+    label = "Passed" if passed else "Failed"
+    status_html += (
+        f'<div class="smile-check-badge {badge_class}">'
+        f'{icon} {name}: {label} ({detail})'
+        f'</div>'
+    )
+status_html += '</div>'
+st.markdown(status_html, unsafe_allow_html=True)
+
+# validation charts row
 col_left, col_right = card_grid(2)
 
-# Donut: mismatch type breakdown
+# Bar: table row counts (always visible)
 with col_left:
+    with chart_panel("Table Row Counts", height=420):
+        df_counts = pd.DataFrame(
+            [{"Table": t, "Rows": c} for t, c in table_counts.items()]
+        ).sort_values("Rows", ascending=True)
+        fig = px.bar(
+            df_counts, x="Rows", y="Table", orientation="h",
+            color_discrete_sequence=[CHART_PALETTE[0]],
+            text="Rows",
+            height=340,
+        )
+        fig.update_traces(textposition="outside", cliponaxis=False)
+        apply_plotly_style(fig)
+        fig.update_layout(
+            yaxis_title="",
+            xaxis_title="Row Count",
+            margin=dict(t=10, b=40, l=10, r=80),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+# Bar: record sync comparison (always visible)
+with col_right:
+    with chart_panel("Record Sync Comparison", height=420):
+        sync_data = pd.DataFrame([
+            {"Table": "student_all", "Records": table_counts.get("student_all", 0)},
+            {"Table": "status_student", "Records": table_counts.get("status_student", 0)},
+            {"Table": "tracking_student", "Records": table_counts.get("tracking_student", 0)},
+        ])
+        fig = px.bar(
+            sync_data, x="Table", y="Records",
+            color_discrete_sequence=[CHART_PALETTE[0]],
+            text="Records",
+            height=340,
+        )
+        fig.update_traces(textposition="outside", cliponaxis=False)
+        apply_plotly_style(fig)
+        fig.update_layout(
+            xaxis_title="",
+            yaxis_title="Record Count",
+            margin=dict(t=30, b=10, l=10, r=10),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        match_status = "Records match" if total_students == total_status else f"Difference: {abs(total_students - total_status)}"
+        st.caption(f"student_all: {total_students:,} | status_student: {total_status:,} | {match_status}")
+
+# mismatch detail charts
+section_divider()
+
+col_left2, col_right2 = card_grid(2)
+
+# Donut: mismatch type breakdown
+with col_left2:
     with chart_panel("Sync Mismatch Breakdown", height=420):
         if df_sync.empty:
-            st.info("No sync mismatches detected.")
+            st.success("Tidak ada sync mismatch yang terdeteksi. Semua data tersinkronisasi dengan benar.")
         else:
             mismatch_counts = (
                 df_sync["mismatch_type"]
                 .value_counts()
                 .reset_index()
-                .rename(columns={"index": "mismatch_type", "mismatch_type": "type", "count": "count"})
             )
-            # Ensure column names are correct after value_counts
-            if "type" in mismatch_counts.columns:
-                mismatch_counts.columns = ["type", "count"]
-            else:
-                mismatch_counts.columns = ["type", "count"]
+            mismatch_counts.columns = ["type", "count"]
 
             color_map = {
                 "missing_in_status_student": COLORS["danger"],
                 "missing_in_student_all": COLORS["warning"],
                 "name_mismatch": COLORS["secondary"],
             }
-            import plotly.express as px
             fig = px.pie(
                 mismatch_counts,
                 names="type",
@@ -105,6 +172,7 @@ with col_left:
                 textinfo="label+value",
                 textposition="outside",
             )
+            apply_plotly_style(fig)
             fig.update_layout(
                 showlegend=False,
                 margin=dict(t=10, b=10, l=10, r=10),
@@ -112,8 +180,8 @@ with col_left:
             st.plotly_chart(fig, use_container_width=True)
 
 # Bar: issue count by table
-with col_right:
-    with chart_panel("Issues by Table", height=420):
+with col_right2:
+    with chart_panel("Issues By Table", height=420):
         issue_summary = []
         if not df_sync.empty:
             issue_summary.append({"table": "student_all / status_student", "issues": len(df_sync), "type": "Sync Mismatch"})
@@ -124,7 +192,7 @@ with col_right:
                 issue_summary.append({"table": tbl, "issues": len(grp), "type": "Denorm Mismatch"})
 
         if not issue_summary:
-            st.info("No data quality issues detected.")
+            st.success("Tidak ada masalah kualitas data yang terdeteksi. Semua pengecekan lolos.")
         else:
             df_issues = pd.DataFrame(issue_summary)
             color_map = {
@@ -132,7 +200,6 @@ with col_right:
                 "Orphaned Record": COLORS["warning"],
                 "Denorm Mismatch": COLORS["secondary"],
             }
-            import plotly.express as px
             fig = px.bar(
                 df_issues,
                 x="table",
@@ -143,6 +210,7 @@ with col_right:
                 height=340,
             )
             fig.update_traces(textposition="outside")
+            apply_plotly_style(fig)
             fig.update_layout(
                 xaxis_title="",
                 yaxis_title="Issue Count",
@@ -158,21 +226,12 @@ with col_right:
             )
             st.plotly_chart(fig, use_container_width=True)
 
-# Row counts table
-section_divider()
-
-with panel("Table Row Counts"):
-    df_counts = pd.DataFrame(
-        [{"Table": t, "Rows": c} for t, c in table_counts.items()]
-    ).sort_values("Rows", ascending=False)
-    st.dataframe(df_counts, use_container_width=True, hide_index=True)
-
-# Detail: sync mismatches
+# detail tables
 section_divider()
 
 with table_panel("Detail - Sync Mismatches (student_all / status_student)", height=400):
     if df_sync.empty:
-        st.info("No mismatches found between student_all and status_student.")
+        st.success("Tidak ada mismatch antara student_all dan status_student.")
     else:
         type_filter = st.multiselect(
             "Filter by mismatch type",
@@ -182,25 +241,23 @@ with table_panel("Detail - Sync Mismatches (student_all / status_student)", heig
         )
         filtered = df_sync[df_sync["mismatch_type"].isin(type_filter)]
         st.dataframe(filtered, use_container_width=True, hide_index=True)
-        st.caption(f"Showing {len(filtered)} of {len(df_sync)} mismatch(es)")
+        st.caption(f"Menampilkan {len(filtered)} dari {len(df_sync)} mismatch")
 
-# Detail: orphaned records
-with table_panel("Detail - Orphaned tracking_student Records", height=400):
+with table_panel("Detail - Orphaned Tracking Student Records", height=400):
     if df_orphan.empty:
-        st.info("No orphaned tracking_student rows found.")
+        st.success("Tidak ada orphaned tracking_student rows yang ditemukan.")
     else:
         display_cols = [
-            c for c in ["id_tracking_student", "nim", "student_name",
+            c for c in ["id_tracking_student", "NIM", "student_name",
                          "company", "position", "progress_student", "last_update"]
             if c in df_orphan.columns
         ]
         st.dataframe(df_orphan[display_cols], use_container_width=True, hide_index=True)
-        st.caption(f"{len(df_orphan)} orphaned row(s) — nim not found in student_all")
+        st.caption(f"{len(df_orphan)} orphaned row(s) - NIM tidak ditemukan di student_all")
 
-# Detail: denormalization inconsistencies
 with table_panel("Detail - Denormalization Inconsistencies", height=400):
     if df_denorm.empty:
-        st.info("No denormalization mismatches detected.")
+        st.success("Tidak ada denormalization mismatch yang terdeteksi.")
     else:
         tbl_filter = st.multiselect(
             "Filter by source table",
@@ -211,6 +268,6 @@ with table_panel("Detail - Denormalization Inconsistencies", height=400):
         filtered = df_denorm[df_denorm["source_table"].isin(tbl_filter)]
         st.dataframe(filtered, use_container_width=True, hide_index=True)
         st.caption(
-            f"Showing {len(filtered)} of {len(df_denorm)} inconsistency(ies) — "
-            "duplicated columns disagree with their canonical FK source"
+            f"Menampilkan {len(filtered)} dari {len(df_denorm)} inkonsistensi - "
+            "kolom duplikat tidak sesuai dengan sumber FK kanoniknya"
         )

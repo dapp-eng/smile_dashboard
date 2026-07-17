@@ -21,14 +21,11 @@ def get_ghosting_flags():
 
 
 def get_talent_requests_live():
-    """For CRUD pages — pulls live from Supabase, not CSV."""
+    # CRUD pages pull live from supabase, not CSV
     return load_supabase_table("talent_request")
 
 
-# ─────────────────────────────────────────────
-#  BT-08: Data Quality queries
-# ─────────────────────────────────────────────
-
+# data quality queries
 def get_sync_mismatch():
     student_all = load_csv_table("student_all")
     status_student = load_csv_table("status_student")
@@ -53,7 +50,17 @@ def get_denorm_inconsistencies():
 
 
 def get_all_table_counts():
-    """Row counts for every CSV table — used by data quality overview."""
+    # row counts for all CSV tables - used by data quality overview
     tables = ["student_all", "status_student", "tracking_student",
               "tracking_company", "company", "talent_request"]
     return {t: len(load_csv_table(t)) for t in tables}
+
+
+# company monitoring queries
+def get_company_monitoring_data():
+    return {
+        "company": load_csv_table("company"),
+        "tracking_company": load_csv_table("tracking_company"),
+        "talent_request": load_csv_table("talent_request"),
+        "tracking_student": load_csv_table("tracking_student"),
+    }
