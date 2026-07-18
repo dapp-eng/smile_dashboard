@@ -22,12 +22,12 @@ section[data-testid="stSidebar"] > div:first-child {
 
 /* KPI card */
 .smile-metric-card {
-    background: var(--secondary-background-color);
-    border: 1px solid var(--border-color, #E2E8F0);
+    background: var(--smile-card-bg, var(--secondary-background-color, #FFFFFF));
+    border: 1px solid var(--smile-card-border, var(--border-color, #E2E8F0));
     border-radius: 16px;
     padding: 20px 14px 16px;
     text-align: center;
-    min-height: 110px;
+    min-height: 128px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -47,12 +47,17 @@ section[data-testid="stSidebar"] > div:first-child {
         0 10px 20px rgba(0,0,0,0.04),
         0 20px 40px rgba(52,98,237,0.08);
 }
+/* accent bar - override per card with --smile-accent / --smile-accent-2 */
 .smile-metric-card::before {
     content: '';
     position: absolute;
     top: 0; left: 0; right: 0;
     height: 3px;
-    background: linear-gradient(90deg, #3462ED, #4748B0);
+    background: linear-gradient(
+        90deg,
+        var(--smile-accent, #3462ED),
+        var(--smile-accent-2, var(--smile-accent, #4748B0))
+    );
     border-radius: 16px 16px 0 0;
 }
 
@@ -60,25 +65,29 @@ section[data-testid="stSidebar"] > div:first-child {
 .smile-metric-card .smile-metric-label,
 p.smile-metric-label {
     font-family: 'Inter', sans-serif !important;
-    font-size: 10px !important;
+    font-size: 14px !important;
     font-weight: 600 !important;
     color: var(--text-color) !important;
-    opacity: 0.5;
+    opacity: 0.6;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
     margin: 0 0 8px 0 !important;
     line-height: 1.3 !important;
     white-space: nowrap;
+    overflow: hidden;
+    max-width: 100%;
 }
 .smile-metric-card .smile-metric-value,
 p.smile-metric-value {
     font-family: 'Montserrat', sans-serif !important;
-    font-size: 22px !important;
+    font-size: 26px !important;
     font-weight: 800 !important;
-    color: var(--text-color) !important;
+    color: var(--smile-value-color, var(--text-color)) !important;
     margin: 0 !important;
     line-height: 1.1 !important;
     white-space: nowrap;
+    overflow: hidden;
+    max-width: 100%;
     animation: smileValueReveal 0.7s cubic-bezier(.4,0,.2,1);
 }
 
@@ -86,7 +95,7 @@ p.smile-metric-value {
 .smile-delta {
     display: inline-block;
     font-family: 'Inter', sans-serif;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     padding: 2px 10px;
     border-radius: 20px;
@@ -119,7 +128,7 @@ p.smile-metric-value {
 .smile-panel-title {
     font-family: 'Montserrat', sans-serif;
     font-weight: 700;
-    font-size: 15px;
+    font-size: 19px;
     color: var(--text-color);
     margin: 0 0 16px 0;
     letter-spacing: 0.01em;
@@ -144,7 +153,7 @@ p.smile-metric-value {
 .smile-page-header h1 {
     font-family: 'Montserrat', sans-serif;
     font-weight: 800;
-    font-size: 28px;
+    font-size: 60px;
     margin-bottom: 0;
     background: linear-gradient(135deg, #3462ED 0%, #4748B0 100%);
     -webkit-background-clip: text;
@@ -153,7 +162,7 @@ p.smile-metric-value {
 }
 .smile-page-caption {
     font-family: 'Inter', sans-serif;
-    font-size: 13px;
+    font-size: 25px;
     color: var(--text-color);
     opacity: 0.5;
     margin-top: 2px;
@@ -290,12 +299,63 @@ div[data-testid="stMetric"] {
 }
 div[data-baseweb="select"] { border-radius: 10px !important; }
 div[data-testid="stDataFrame"] { border-radius: 12px; overflow: hidden; }
+
+/* ---- global type scale ----
+   Everything below is scoped to .block-container on purpose: the sidebar has
+   its own deliberately smaller scale (see the sidebar-* rules above) and must
+   not inherit these. */
+
+/* section headings — pages write these as st.markdown("#### ...") */
+.block-container h3 { font-size: 26px !important; }
+.block-container h4 { font-size: 22px !important; }
+
+/* body copy. The :not() keeps this rule off the .smile-* paragraphs
+   (panel titles, page caption, metric label/value), which set their own
+   sizes and would otherwise lose to this selector on specificity. */
+.block-container [data-testid="stMarkdownContainer"] p:not([class^="smile-"]) {
+    font-size: 16px;
+}
+.block-container [data-testid="stCaptionContainer"] p { font-size: 14px; }
+
+/* widget labels: slider, checkbox, radio, multiselect, selectbox */
+.block-container [data-testid="stWidgetLabel"] p,
+.block-container .stCheckbox label p,
+.block-container .stRadio label p { font-size: 15px; }
+
+/* native st.metric (used in the talent-request detail panel) */
+.block-container [data-testid="stMetricLabel"] p { font-size: 13px; }
+.block-container [data-testid="stMetricValue"] { font-size: 26px; }
 </style>
 """
+
+_THEME_VARS = {
+    "light": {
+        "--background-color": "#F8FAFC",
+        "--secondary-background-color": "#FFFFFF",
+        "--text-color": "#1E293B",
+        "--border-color": "#E2E8F0",
+    },
+    "dark": {
+        "--background-color": "#0F172A",
+        "--secondary-background-color": "#1E293B",
+        "--text-color": "#F1F5F9",
+        "--border-color": "#334155",
+    },
+}
+
+
+def _theme_var_css():
+    try:
+        mode = st.context.theme.type or "light"
+    except Exception:
+        mode = "light"
+    decls = "".join(f"{k}:{v};" for k, v in _THEME_VARS.get(mode, _THEME_VARS["light"]).items())
+    return f"<style>:root{{{decls}}}</style>"
 
 
 def inject_global_css():
     # inject CSS once per page render
+    st.markdown(_theme_var_css(), unsafe_allow_html=True)
     st.markdown(_LAYOUT_CSS, unsafe_allow_html=True)
 
 
@@ -372,6 +432,24 @@ def metric_strip(items):
         delta = item.get("delta", "")
         sentiment = item.get("sentiment", "neutral")
 
+        style_parts = []
+        color = item.get("color")
+        if color:
+            if isinstance(color, (tuple, list)):
+                start, end = color[0], color[-1]
+            else:
+                start = end = color
+            style_parts.append(f"--smile-accent:{start}")
+            style_parts.append(f"--smile-accent-2:{end}")
+        value_color = item.get("value_color")
+        if value_color:
+            style_parts.append(f"--smile-value-color:{value_color}")
+        if item.get("bg"):
+            style_parts.append(f"--smile-card-bg:{item['bg']}")
+        if item.get("border"):
+            style_parts.append(f"--smile-card-border:{item['border']}")
+        style = f' style="{";".join(style_parts)}"' if style_parts else ""
+
         delta_html = ""
         if delta:
             delta_html = (
@@ -382,14 +460,9 @@ def metric_strip(items):
         with col:
             st.markdown(
                 f"""
-                <div class="smile-metric-card">
-                    <div style="font-family:'Inter',sans-serif;font-size:10px;font-weight:600;
-                        text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;
-                        margin:0 0 6px 0;line-height:1.3;color:inherit;
-                        white-space:nowrap;overflow:hidden;">{label}</div>
-                    <div style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:800;
-                        line-height:1.1;margin:0;color:inherit;
-                        white-space:nowrap;overflow:hidden;">{value}</div>
+                <div class="smile-metric-card"{style}>
+                    <div class="smile-metric-label">{label}</div>
+                    <div class="smile-metric-value">{value}</div>
                     {delta_html}
                 </div>
                 """,
