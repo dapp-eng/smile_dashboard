@@ -9,8 +9,8 @@ showSidebarBorder = false
 
 # Warna chart
 chartCategoricalColors = [
-    "#3462ED", # primary blue
-    "#4748B0", # purple
+    "#007BFF", # primary blue
+    "#42c1b6", # purple
     "#5B7FFF", # soft blue
     "#1E3A8A", # dark blue
     "#7C93ED", # periwinkle

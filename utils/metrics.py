@@ -1,17 +1,221 @@
 import pandas as pd
 
 
+def _resolve_col(df: pd.DataFrame, *candidates: str) -> str:
+    """
+    Return the first candidate column that actually exists in df, matched
+    case-insensitively. Guards against dataset casing drift (IPK vs ipk,
+    NIM vs nim) that we can't verify until the real CSVs are downloaded.
+    Raises KeyError with all candidates if none match.
+    """
+    lower = {c.lower(): c for c in df.columns}
+    for cand in candidates:
+        if cand in df.columns:
+            return cand
+        if cand.lower() in lower:
+            return lower[cand.lower()]
+    raise KeyError(f"None of {candidates} found in columns {list(df.columns)}")
+
+
 def get_eligible_students(student_all: pd.DataFrame, status_student: pd.DataFrame) -> pd.DataFrame:
     """
-    BT-06: Eligible students = status is Active.
-    Joins student_all with status_student on NIM.
+    BT-06 (legacy/simple): Eligible students = status is Active.
+    Kept for backward compatibility. Prefer `get_student_eligibility`, which
+    applies the full CV / portofolio / IPK / status / ketersediaan rule.
     """
     df = student_all.merge(status_student, on="NIM", how="inner", suffixes=("", "_status"))
     df = df[df["status"] == "Active"]
-    return df[[
-        "NIM", "nama", "program_studi", "semester",
-        "ipk", "status", "domisili", "ketersediaan", "tools"
-    ]]
+    keep = ["NIM", "nama", "program_studi", "semester",
+            "ipk", "status", "domisili", "ketersediaan", "tools"]
+    return df[[c for c in keep if c in df.columns]]
+
+
+def get_student_eligibility(
+    student_all: pd.DataFrame,
+    status_student: pd.DataFrame,
+    *,
+    ipk_min: float = 3.0,
+    require_cv: bool = True,
+    require_portfolio: bool = True,
+    require_active: bool = True,
+    require_available: bool = True,
+) -> pd.DataFrame:
+    """
+    BT-06: Determine which students are fit to send to companies.
+
+    Eligibility is DERIVED (never read from a stored `eligible` column, which
+    does not exist in the source schema) from the status_student fields:
+      - CV == "Ada"                (if require_cv)
+      - portofolio == "Ada"        (if require_portfolio)
+      - status == "Active"         (if require_active)
+      - ketersediaan == "Available"(if require_available)
+      - IPK >= ipk_min
+
+    Returns the joined student frame with two extra columns:
+      - is_eligible (bool)
+      - ineligible_reasons (str) — semicolon-joined list of failed checks,
+        empty when eligible.
+    """
+    df = student_all.merge(
+        status_student, on="NIM", how="inner", suffixes=("", "_status")
+    )
+
+    nama = _resolve_col(df, "nama")
+    prodi = _resolve_col(df, "program_studi")
+    sem = _resolve_col(df, "semester")
+    cv = _resolve_col(df, "CV")
+    porto = _resolve_col(df, "portofolio")
+    ipk = _resolve_col(df, "IPK", "ipk")
+    status = _resolve_col(df, "status")
+    ketersediaan = _resolve_col(df, "ketersediaan")
+    domisili = _resolve_col(df, "domisili")
+    tools = _resolve_col(df, "tools")
+
+    ipk_num = pd.to_numeric(df[ipk], errors="coerce")
+
+    checks = {}  # reason label -> boolean Series that is True when the check FAILS
+    if require_cv:
+        checks["No CV"] = df[cv].astype(str).str.strip().str.lower() != "ada"
+    if require_portfolio:
+        checks["No portfolio"] = df[porto].astype(str).str.strip().str.lower() != "ada"
+    if require_active:
+        checks["Not active"] = df[status].astype(str).str.strip().str.lower() != "active"
+    if require_available:
+        checks["Not available"] = (
+            df[ketersediaan].astype(str).str.strip().str.lower() != "available"
+        )
+    checks[f"IPK < {ipk_min:.2f}"] = ipk_num.fillna(-1) < ipk_min
+
+    def _reasons(i):
+        return "; ".join(label for label, failed in checks.items() if bool(failed.iloc[i]))
+
+    df["ineligible_reasons"] = [_reasons(i) for i in range(len(df))]
+    df["is_eligible"] = df["ineligible_reasons"] == ""
+
+    # Normalise the columns the page relies on to stable names.
+    out = df.rename(columns={
+        nama: "nama", prodi: "program_studi", sem: "semester",
+        ipk: "IPK", status: "status", ketersediaan: "ketersediaan",
+        domisili: "domisili", tools: "tools", cv: "CV", porto: "portofolio",
+    })
+    out["IPK"] = ipk_num
+    keep = ["NIM", "nama", "program_studi", "semester", "IPK", "CV",
+            "portofolio", "status", "ketersediaan", "domisili", "tools",
+            "is_eligible", "ineligible_reasons"]
+    return out[[c for c in keep if c in out.columns]]
+
+
+def get_student_supply_summary(
+    student_all: pd.DataFrame, status_student: pd.DataFrame
+) -> dict:
+    """
+    Page-level snapshot of the student-supply side, independent of the
+    BT-06 eligibility filter widgets. Feeds the KPI hero at the top of
+    Monitor Student.
+
+    Returns a dict:
+      - total      : number of students (student_all master rows)
+      - available  : ketersediaan == "Available" in status_student
+      - placed     : ketersediaan == "Placed"
+      - n_prodi    : distinct program_studi
+      - avg_ipk    : mean IPK (NaN-safe; None if unavailable)
+    """
+    prodi = _resolve_col(student_all, "program_studi")
+    total = int(student_all[_resolve_col(student_all, "NIM")].nunique())
+    n_prodi = int(student_all[prodi].dropna().nunique())
+
+    def _count_ketersediaan(value: str) -> int:
+        try:
+            col = _resolve_col(status_student, "ketersediaan")
+        except KeyError:
+            return 0
+        return int(
+            (status_student[col].astype(str).str.strip().str.lower() == value).sum()
+        )
+
+    available = _count_ketersediaan("available")
+    placed = _count_ketersediaan("placed")
+
+    try:
+        ipk_col = _resolve_col(status_student, "IPK", "ipk")
+        avg_ipk = pd.to_numeric(status_student[ipk_col], errors="coerce").mean()
+        avg_ipk = None if pd.isna(avg_ipk) else round(float(avg_ipk), 2)
+    except KeyError:
+        avg_ipk = None
+
+    return {
+        "total": total,
+        "available": available,
+        "placed": placed,
+        "n_prodi": n_prodi,
+        "avg_ipk": avg_ipk,
+    }
+
+
+def match_students_to_request(
+    eligible: pd.DataFrame,
+    request: pd.Series,
+    *,
+    w_bidang: int = 45,
+    w_semester: int = 30,
+    w_tools: int = 25,
+) -> pd.DataFrame:
+    """
+    BT-01: Rank eligible students against one talent request.
+
+    `eligible` should already be filtered to eligible students (BT-06 feeds
+    BT-01). `request` is one row of talent_request.
+
+    Score (0-100) combines three signals, each contributing its weight:
+      - bidang: student's program_studi is named in the request's
+        bidang_studi_dibutuhkan (case-insensitive substring, either way).
+      - semester: student's semester >= minimum_semester.
+      - tools: fraction of the student's tools that appear in the request's
+        deskripsi_requirement (the request has no structured tools field, so
+        we text-match against the free-text requirement).
+
+    Returns eligible rows with match_bidang / match_semester / match_tools
+    (0-1 each) and match_score (0-100), sorted best-first.
+    """
+    df = eligible.copy()
+    if df.empty:
+        df["match_score"] = []
+        return df
+
+    def _get(field, default=""):
+        val = request.get(field, default) if hasattr(request, "get") else default
+        return "" if pd.isna(val) else val
+
+    bidang_req = str(_get("bidang_studi_dibutuhkan")).lower()
+    min_sem = pd.to_numeric(pd.Series([_get("minimum_semester", 0)]), errors="coerce").iloc[0]
+    min_sem = 0 if pd.isna(min_sem) else min_sem
+    requirement_txt = str(_get("deskripsi_requirement")).lower()
+
+    def _bidang_score(prodi):
+        prodi = str(prodi).strip().lower()
+        if not prodi or not bidang_req:
+            return 0.0
+        return 1.0 if (prodi in bidang_req or bidang_req in prodi) else 0.0
+
+    def _tools_score(tools):
+        toks = [t.strip().lower() for t in str(tools).split(",") if t.strip()]
+        if not toks:
+            return 0.0
+        hits = sum(1 for t in toks if t in requirement_txt)
+        return hits / len(toks)
+
+    sem_num = pd.to_numeric(df["semester"], errors="coerce").fillna(0)
+    df["match_bidang"] = df["program_studi"].map(_bidang_score)
+    df["match_semester"] = (sem_num >= min_sem).astype(float)
+    df["match_tools"] = df["tools"].map(_tools_score) if "tools" in df.columns else 0.0
+
+    df["match_score"] = (
+        df["match_bidang"] * w_bidang
+        + df["match_semester"] * w_semester
+        + df["match_tools"] * w_tools
+    ).round(1)
+
+    return df.sort_values("match_score", ascending=False).reset_index(drop=True)
 
 
 def get_tracking_company_summary(tracking_company: pd.DataFrame, tracking_student: pd.DataFrame) -> pd.DataFrame:

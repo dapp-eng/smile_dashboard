@@ -9,6 +9,31 @@ def get_eligible_students():
     return metrics.get_eligible_students(student_all, status_student)
 
 
+def get_student_eligibility(**criteria):
+    """BT-06: full-rule eligibility over the CSV layer. See metrics.get_student_eligibility."""
+    student_all = load_csv_table("student_all")
+    status_student = load_csv_table("status_student")
+    return metrics.get_student_eligibility(student_all, status_student, **criteria)
+
+
+def get_student_supply_summary():
+    """Page-level KPIs for Monitor Student's hero row (filter-independent)."""
+    student_all = load_csv_table("student_all")
+    status_student = load_csv_table("status_student")
+    return metrics.get_student_supply_summary(student_all, status_student)
+
+
+def get_talent_requests():
+    """Read-only talent requests from the CSV layer (matching source for BT-01)."""
+    return load_csv_table("talent_request")
+
+
+def get_program_studi_options():
+    """Sorted unique program_studi from student_all — for filter widgets."""
+    df = load_csv_table("student_all")
+    return sorted(df["program_studi"].dropna().astype(str).unique().tolist())
+
+
 def get_tracking_company_summary():
     tracking_company = load_csv_table("tracking_company")
     tracking_student = load_csv_table("tracking_student")
