@@ -6,8 +6,7 @@ from utils.layout import (
     inject_global_css, page_header, metric_strip, chart_panel,
     filter_bar, table_panel, panel, card_grid, section_divider,
 )
-from utils.theme import COLORS
-from utils import charts
+from utils.theme import COLORS, CHART_PALETTE, apply_plotly_style
 from utils.queries import get_data_quality_master
 
 # Page setup
@@ -25,19 +24,76 @@ if df_master.empty:
     st.info("No data available for sync evaluation.")
     st.stop()
 
+# Preprocess some columns for filtering
+df_master["semester_status"] = df_master["semester_status"].fillna("Unknown").astype(str)
+df_master["program_studi_status"] = df_master["program_studi_status"].fillna("Unknown").astype(str)
+
+# Filters
+with filter_bar():
+    fc1, fc2, fc3 = st.columns([1, 1, 2])
+    with fc1:
+        sorted_sems_filter = sorted(df_master["semester_status"].unique(), key=lambda x: int(float(x)) if x.replace('.','',1).isdigit() else 999)
+        sel_semester = st.multiselect(
+            "Semester",
+            options=sorted_sems_filter,
+            default=[]
+        )
+    with fc2:
+        sorted_prodi = sorted(df_master["program_studi_status"].unique())
+        sel_prodi = st.multiselect(
+            "Program Studi",
+            options=sorted_prodi,
+            default=[]
+        )
+    with fc3:
+        valid_dates = df_master["sync_date"].dropna()
+        if len(valid_dates) > 0:
+            min_date = valid_dates.min().date()
+            max_date = valid_dates.max().date()
+        else:
+            min_date = pd.Timestamp("2023-01-01").date()
+            max_date = pd.Timestamp("2026-12-31").date()
+            
+        date_range = st.date_input(
+            "Sync Date Range",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date
+        )
+
+# Apply filters
+if sel_semester:
+    df_master = df_master[df_master["semester_status"].isin(sel_semester)]
+if sel_prodi:
+    df_master = df_master[df_master["program_studi_status"].isin(sel_prodi)]
+    
+if isinstance(date_range, tuple) and len(date_range) == 2:
+    start_dt = pd.Timestamp(date_range[0])
+    end_dt = pd.Timestamp(date_range[1])
+    mask = df_master["sync_date"].notna()
+    df_master = df_master[mask & (df_master["sync_date"] >= start_dt) & (df_master["sync_date"] <= end_dt)]
+
+if df_master.empty:
+    st.info("No data matches the selected filters.")
+    st.stop()
+
 # Row 2: Earliest / Latest Sync Date
 earliest_sync = df_master["sync_date"].min()
 latest_sync = df_master["sync_date"].max()
 
-c1, c2 = card_grid(2)
-with c1:
-    with panel():
-        st.markdown(f"<div style='text-align: center; color: var(--text-color); font-size: 0.9rem;'>Earliest Sync Date</div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='text-align: center; font-size: 1.5rem; font-weight: 600; color: var(--primary-color);'>{earliest_sync.strftime('%d %B %Y')}</div>", unsafe_allow_html=True)
-with c2:
-    with panel():
-        st.markdown(f"<div style='text-align: center; color: var(--text-color); font-size: 0.9rem;'>Latest Sync Date</div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='text-align: center; font-size: 1.5rem; font-weight: 600; color: var(--primary-color);'>{latest_sync.strftime('%d %B %Y')}</div>", unsafe_allow_html=True)
+earliest_str = earliest_sync.strftime('%d %B %Y') if not pd.isnull(earliest_sync) else "N/A"
+latest_str = latest_sync.strftime('%d %B %Y') if not pd.isnull(latest_sync) else "N/A"
+
+metric_strip([
+    {
+        "label": "Earliest Sync Date",
+        "value": earliest_str,
+    },
+    {
+        "label": "Latest Sync Date",
+        "value": latest_str,
+    }
+])
 
 section_divider()
 
@@ -66,9 +122,9 @@ metric_strip([
 section_divider()
 
 STALENESS_COLORS = {
-    "Safe": COLORS["success"],
-    "Stale": COLORS["warning"],
-    "Critical": COLORS["danger"]
+    "Safe": CHART_PALETTE[0],
+    "Stale": CHART_PALETTE[1],
+    "Critical": CHART_PALETTE[2]
 }
 
 # Row 4: Histogram and Pie Chart
@@ -76,7 +132,7 @@ col_hist, col_pie = st.columns([3, 2], gap="medium")
 
 with col_hist:
     with chart_panel("Days Since Last Sync", height=380):
-        fig_hist = charts.histogram(
+        fig_hist = px.histogram(
             df_master, 
             x="days_since_sync", 
             color="staleness",
@@ -84,6 +140,7 @@ with col_hist:
             height=300
         )
         fig_hist.update_traces(xbins_size=30, marker_line_color="var(--background-color)", marker_line_width=0.5)
+        apply_plotly_style(fig_hist)
         fig_hist.update_layout(
             margin=dict(l=10, r=10, t=10, b=10),
             xaxis_title="Days Since Sync",
@@ -98,17 +155,25 @@ with col_pie:
         df_pie = df_master["staleness"].value_counts().reset_index()
         df_pie.columns = ["staleness", "count"]
         
-        fig_pie = charts.pie(
+        fig_pie = px.pie(
             df_pie,
             names="staleness",
             values="count",
             color="staleness",
             color_discrete_map=STALENESS_COLORS,
-            hole=0.4,
-            height=300
+            hole=0.5,
         )
-        fig_pie.update_traces(textinfo="label+percent", textposition="inside")
-        fig_pie.update_layout(margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+        fig_pie.update_traces(
+            textinfo="label+percent",
+            textposition="outside",
+            pull=[0.02] * len(df_pie),
+        )
+        apply_plotly_style(fig_pie)
+        fig_pie.update_layout(
+            margin=dict(l=10, r=10, t=10, b=10),
+            height=300,
+            showlegend=True
+        )
         st.plotly_chart(fig_pie, use_container_width=True)
 
 # Row 5: Line chart for monthly sync
@@ -117,17 +182,23 @@ with chart_panel("Monthly Sync Volume", height=380):
     df_sync_time["sync_month"] = df_sync_time["sync_date"].dt.to_period("M").astype(str)
     monthly_counts = df_sync_time.groupby("sync_month").size().reset_index(name="syncs")
     
-    fig_line = charts.line(
+    fig_line = px.area(
         monthly_counts, 
         x="sync_month", 
-        y="syncs", 
-        height=300
+        y="syncs",
+        color_discrete_sequence=[CHART_PALETTE[0]],
+        markers=True
     )
-    fig_line.update_traces(line_color=COLORS["primary"], marker=dict(size=8))
+    apply_plotly_style(fig_line)
     fig_line.update_layout(
         margin=dict(l=10, r=10, t=10, b=10),
         xaxis_title="Month",
-        yaxis_title="Number of Syncs"
+        yaxis_title="Number of Syncs",
+        height=300
+    )
+    fig_line.update_traces(
+        line=dict(width=2.5),
+        fillcolor="rgba(52,98,237,0.08)",
     )
     st.plotly_chart(fig_line, use_container_width=True)
 
@@ -136,12 +207,11 @@ col_sem, col_prog = st.columns([1, 1], gap="medium")
 
 with col_sem:
     with chart_panel("Staleness by Semester", height=420):
-        df_master["semester_status"] = df_master["semester_status"].fillna("Unknown").astype(str)
         sorted_sems = sorted(df_master["semester_status"].unique(), key=lambda x: int(float(x)) if x.replace('.','',1).isdigit() else 999)
         
         sem_counts = df_master.groupby(["semester_status", "staleness"]).size().reset_index(name="count")
 
-        fig_sem = charts.bar(
+        fig_sem = px.bar(
             sem_counts, 
             x="semester_status", 
             y="count",
@@ -151,6 +221,8 @@ with col_sem:
             barmode="stack",
             height=340
         )
+        fig_sem.update_layout(xaxis_tickangle=-30)
+        apply_plotly_style(fig_sem)
         fig_sem.update_layout(
             margin=dict(l=10, r=10, t=10, b=10),
             xaxis_title="Semester",
@@ -165,7 +237,7 @@ with col_prog:
         
         prog_counts = df_master.groupby(["program_studi_status", "staleness"]).size().reset_index(name="count")
         
-        fig_prog = charts.bar(
+        fig_prog = px.bar(
             prog_counts, 
             y="program_studi_status", 
             x="count",
@@ -176,6 +248,7 @@ with col_prog:
             barmode="stack",
             height=340
         )
+        apply_plotly_style(fig_prog)
         fig_prog.update_layout(
             margin=dict(l=10, r=10, t=10, b=10),
             yaxis_title="",
