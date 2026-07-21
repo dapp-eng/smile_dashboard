@@ -48,7 +48,7 @@ pg = st.navigation([
     st.Page("pages/2_monitor_company.py", title="Monitor Company", icon=":material/business:"),
     st.Page("pages/3_monitor_process.py", title="Monitor Process", icon=":material/sync:"),
     st.Page("pages/4_reporting.py", title="Reporting", icon=":material/assessment:"),
-    st.Page("pages/5_data_quality.py", title="Data Quality", icon=":material/verified:"),
+    st.Page("pages/5_data_quality.py", title="Data Synchronization", icon=":material/verified:"),
 ])
 
 render_sidebar_footer()

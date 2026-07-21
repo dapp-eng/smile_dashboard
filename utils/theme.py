@@ -111,7 +111,7 @@ def apply_plotly_style(fig):
     fig.update_layout(**PLOTLY_LAYOUT)
     # cliponaxis only for cartesian traces - invalid on pie/donut
     for trace in fig.data:
-        if trace.type not in ("pie", "sunburst", "funnel", "waterfall"):
+        if trace.type not in ("pie", "sunburst", "funnel", "waterfall", "sankey"):
             trace.update(cliponaxis=False)
     return fig
 

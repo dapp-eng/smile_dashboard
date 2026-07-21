@@ -244,24 +244,21 @@ def get_tracking_company_summary(tracking_company: pd.DataFrame, tracking_studen
     return df
 
 
-def get_ghosting_flags(tracking_student: pd.DataFrame, today: pd.Timestamp = None) -> pd.DataFrame:
-    """
-    BT-05: Flag ghosting cases, both explicitly labeled (FU 1/2/3, Ghosting)
-    and overdue-but-unlabeled cases based on last_update.
-    """
+def get_ghosting_flags(tracking_student: pd.DataFrame, tracking_company: pd.DataFrame, today: pd.Timestamp = None, include_healthy: bool = False) -> pd.DataFrame:
     if today is None:
         today = pd.Timestamp.today().normalize()
 
-    df = tracking_student.copy()
-    df["last_update"] = pd.to_datetime(df["last_update"])
-    df["days_since_update"] = (today - df["last_update"]).dt.days
+    df = tracking_student.merge(tracking_company[['id_tracking_company', 'send_date']], on='id_tracking_company', how='left')
+    
+    df["send_date"] = pd.to_datetime(df["send_date"], errors="coerce")
+    df["days_since_update"] = (today - df["send_date"]).dt.days
 
     finished_statuses = ["Placement", "Rejected", "Finish"]
     df = df[~df["progress_student"].isin(finished_statuses)]
 
     def ghosting_check(row):
         if row["progress_student"] in ["FU 1", "FU 2", "FU 3", "Ghosting"]:
-            return "labeled"
+            return row["progress_student"]
         elif row["days_since_update"] > 28:
             return "overdue_unlabeled_ghosting"
         elif row["days_since_update"] > 21:
@@ -271,11 +268,14 @@ def get_ghosting_flags(tracking_student: pd.DataFrame, today: pd.Timestamp = Non
         elif row["days_since_update"] > 7:
             return "overdue_unlabeled_fu1"
         else:
-            return "ok"
+            return "Healthy"
 
     df["ghosting_check"] = df.apply(ghosting_check, axis=1)
-    return df[df["ghosting_check"] != "ok"]
-
+    
+    if not include_healthy:
+        return df[df["ghosting_check"] != "Healthy"]
+        
+    return df
 
 # ─────────────────────────────────────────────
 #  BT-08: Data Quality Master Table

@@ -12,9 +12,9 @@ from utils.queries import get_data_quality_master
 # Page setup
 inject_global_css()
 page_header(
-    "Data Quality",
-    "BT-08 — Data Sync & Integrity Checks",
-    page_title="Data Quality | SMILE",
+    "Data Synchronization",
+    "Cek Sinkronisasi Data mahasiswa untuk validasi kelengkapan serta kebaruan data",
+    page_title="Data Synchronization | SMILE",
 )
 
 # Load Data
@@ -176,6 +176,13 @@ with col_pie:
         )
         st.plotly_chart(fig_pie, use_container_width=True)
 
+st.caption(
+    "**Keterangan Metrik Sinkronisasi:**  \n"
+    "**Safe (<90 hari)**: Data rutin disinkronisasi baru-baru ini.  \n"
+    "**Stale (90-179 hari)**: Data sudah mulai usang dan belum disinkronisasi dalam waktu yang cukup lama.  \n"
+    "**Critical (>179 hari)**: Data sudah tidak disinkronisasi lebih dari 1 semester dan berisiko kehilangan relevansi."
+)
+
 # Row 5: Line chart for monthly sync
 with chart_panel("Monthly Sync Volume", height=380):
     df_sync_time = df_master.copy()
@@ -203,7 +210,7 @@ with chart_panel("Monthly Sync Volume", height=380):
     st.plotly_chart(fig_line, use_container_width=True)
 
 # Row 6: Stacked Bar Charts (Semester and Program Studi)
-col_sem, col_prog = st.columns([1, 1], gap="medium")
+col_sem, col_prog = st.columns([2, 3], gap="medium")
 
 with col_sem:
     with chart_panel("Staleness by Semester", height=420):
