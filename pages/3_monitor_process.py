@@ -1,3 +1,5 @@
+# monitor process - bt-02 selection progress, bt-05 ghosting detection
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -5,28 +7,30 @@ import plotly.graph_objects as go
 
 from utils.layout import (
     inject_global_css, page_header, metric_strip, chart_panel,
-    table_panel, card_grid, section_divider, filter_bar
+    table_panel, card_grid, section_divider, filter_bar,
 )
 from utils.theme import COLORS, CHART_PALETTE, apply_plotly_style, PROGRESS_COLORS, REJECTION_COLORS
 from utils.data_loader import load_csv_table
 from utils.metrics import get_ghosting_flags
+from utils.i18n import t
 
 # Page setup
 inject_global_css()
 page_header(
-    "Monitor Process",
-    "BT-05 — Proses seleksi dan deteksi ghosting",
-    page_title="Monitor Process | SMILE"
+    t("page.monitor_process"),
+    bt_caption=t("bt.02_05"),
 )
 
 # Load Data
 df_track = load_csv_table("tracking_student")
 df_company = load_csv_table("tracking_company")
 
-# Use max send_date as 'today' so old mock data doesn't falsely flag everyone as ghosted
+# use max send_date as reference to avoid false ghosting flags on old data
 df_company["send_date"] = pd.to_datetime(df_company["send_date"], dayfirst=True, errors="coerce")
 reference_date = df_company["send_date"].max()
-df_all_ghosting = get_ghosting_flags(df_track, tracking_company=df_company, today=reference_date, include_healthy=True)
+df_all_ghosting = get_ghosting_flags(
+    df_track, tracking_company=df_company, today=reference_date, include_healthy=True,
+)
 df_ghost = df_all_ghosting[df_all_ghosting["ghosting_check"] != "Healthy"]
 
 # Inject system-detected flags into df_track so all top charts reflect the true system state
@@ -44,7 +48,7 @@ if not sys_updates.empty:
     df_track.reset_index(inplace=True)
 
 if df_track.empty:
-    st.info("Tidak ada data tracking tersedia.")
+    st.info(t("mp.no_tracking"))
     st.stop()
 
 # -------------------------------------------------------------
@@ -57,29 +61,43 @@ total_placement = len(df_track[df_track["progress_student"] == "Placement"])
 total_ghosted = len(df_ghost)
 
 metric_strip([
-    {"label": "Total Candidates Tracked", "value": f"{total_tracked:,}"},
-    {"label": "Total Active In Process", "value": f"{active_in_process:,}"},
-    {"label": "Total Placement", "value": f"{total_placement:,}"},
-    {"label": "Total Ghosted", "value": f"{total_ghosted:,}", "sentiment": "danger" if total_ghosted > 0 else "success"}
+    {"label": t("mp.total_tracked"), "value": f"{total_tracked:,}"},
+    {"label": t("mp.active_in_process"), "value": f"{active_in_process:,}"},
+    {"label": t("mp.total_placement"), "value": f"{total_placement:,}"},
+    {
+        "label": t("mp.total_ghosted"),
+        "value": f"{total_ghosted:,}",
+        "sentiment": "danger" if total_ghosted > 0 else "success",
+    },
 ])
 
 section_divider()
 
-st.markdown('''
-    <h3 style='margin-bottom: 0.2rem;'>Candidate Status Overview</h3>
-    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>Where every candidate stands right now</p>
+st.markdown(f'''
+    <h3 style='margin-bottom: 0.2rem;'>{t("mp.status_overview_title")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("mp.status_overview_sub")}</p>
     <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
 ''', unsafe_allow_html=True)
 c1, c2 = st.columns([3, 2], gap="medium")
 
 with c1:
-    with chart_panel("Stage Distribution", height=420, subtitle="Drill into any status to see its stage-by-stage breakdown"):
+    with chart_panel(t("mp.stage_dist"), height=420, subtitle=t("mp.stage_dist_sub")):
+        # canonical (untranslated) filter values used for logic; labels shown are translated
+        category_values = ["All", "Active", "Follow-Up", "Finished", "Rejected"]
+        category_labels = {
+            "All": t("mp.cat_all"),
+            "Active": t("mp.cat_active"),
+            "Follow-Up": t("mp.cat_followup"),
+            "Finished": t("mp.cat_finished"),
+            "Rejected": t("mp.cat_rejected"),
+        }
         cat_filter = st.selectbox(
-            "Category Filter", 
-            ["All", "Active", "Follow-Up", "Finished", "Rejected"],
+            t("mp.category_filter"),
+            category_values,
+            format_func=lambda v: category_labels[v],
             label_visibility="collapsed"
         )
-        
+
         stage_group_map = {
             "Selecting Student by Company": "Active", "Study Case": "Active",
             "CDC Briefing Student": "Active", "Interview User": "Active", "Final Interview": "Active",
@@ -87,7 +105,7 @@ with c1:
             "Ghosting": "Finished", "Rejected": "Finished", "Placement": "Finished",
             "Unresolved": "Finished"
         }
-        
+
         rename_map = {
             "Selecting Student by Company": "S1",
             "Study Case": "S2",
@@ -100,10 +118,10 @@ with c1:
             "Rejection Final Interview": "Rejection S5",
 
         }
-        
+
         df_c1 = df_track.copy()
         df_c1["stage_group"] = df_c1["progress_student"].map(stage_group_map)
-        
+
         if cat_filter == "All":
             def get_all_display(row):
                 if row["stage_group"] == "Finished":
@@ -119,21 +137,21 @@ with c1:
         else:
             df_c1 = df_c1[df_c1["stage_group"] == cat_filter]
             df_c1["display_stage"] = df_c1["progress_student"]
-            
+
         df_c1["display_stage"] = df_c1["display_stage"].replace(rename_map)
-            
+
         stage_counts = df_c1["display_stage"].value_counts().reset_index()
         stage_counts.columns = ["stage", "count"]
-            
+
         chrono_order = [
             "S1", "S2", "S3", "S4", "S5", "Active",
             "Placement",
             "FU 1", "FU 2", "FU 3", "Follow-Up",
-            "Ghosting", 
+            "Ghosting",
             "Rejection S0", "Rejection S2", "Rejection S4", "Rejection S5", "Rejected (Unknown)", "Rejected",
             "Unresolved"
         ]
-        
+
         # Filter out categories that have no data to prevent visible gaps
         actual_stages = set(stage_counts["stage"].unique())
         chrono_order = [s for s in chrono_order if s in actual_stages]
@@ -150,7 +168,7 @@ with c1:
             constraintext='none',
             cliponaxis=False
         )
-        
+
         annotations = []
         for _, row in stage_counts.iterrows():
             if row["count"] > 0:
@@ -167,10 +185,10 @@ with c1:
 
         apply_plotly_style(fig_stage)
         fig_stage.update_layout(
-            xaxis_title="Candidates",
-            yaxis_title="Stages",
+            xaxis_title=t("mp.candidates"),
+            yaxis_title=t("mp.stages"),
             yaxis=dict(
-                showticklabels=False, 
+                showticklabels=False,
                 automargin=False,
                 categoryorder='array',
                 categoryarray=chrono_order
@@ -183,10 +201,10 @@ with c1:
         st.plotly_chart(fig_stage, use_container_width=True)
 
 with c2:
-    with chart_panel("Process Status", height=420, subtitle="Candidate breakdown by process and stage"):
+    with chart_panel(t("mp.process_status"), height=420, subtitle=t("mp.process_status_sub")):
         def get_sunburst_group(row):
             prog = row["progress_student"]
-            
+
             rename_map = {
                 "Selecting Student by Company": "S1",
                 "Study Case": "S2",
@@ -199,7 +217,7 @@ with c2:
                 "Rejection Final Interview": "R.S5",
 
             }
-            
+
             if prog in ["Selecting Student by Company", "Study Case", "CDC Briefing Student", "Interview User", "Final Interview"]:
                 code = rename_map.get(prog, prog)
                 return "In Progress", "Active", code
@@ -221,7 +239,7 @@ with c2:
         df_track[["broad_status", "granular_status", "stage"]] = df_track.apply(
             lambda x: pd.Series(get_sunburst_group(x)), axis=1
         )
-        
+
         status_counts = df_track.groupby(["broad_status", "granular_status", "stage"], dropna=False).size().reset_index(name="count")
 
         status_colors = {
@@ -245,7 +263,7 @@ with c2:
         fig_sun.update_layout(margin=dict(t=10, l=10, r=10, b=10))
         st.plotly_chart(fig_sun, use_container_width=True)
 
-st.caption("**Stage Codes:** S0 (CV Screening), S1 (Selecting Student), S2 (Study Case), S3 (CDC Briefing), S4 (Interview User), S5 (Final Interview). **'R.' prefix in Sunburst** denotes Rejection at that stage.")
+st.caption(t("mp.stage_codes_caption"))
 section_divider()
 
 # -------------------------------------------------------------
@@ -277,16 +295,16 @@ def get_max_stage(row):
 
 df_track['max_stage'] = df_track.apply(get_max_stage, axis=1)
 
-st.markdown('''
-    <h3 style='margin-bottom: 0.2rem;'>Rejection & Pipeline Analysis</h3>
-    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>Detailed breakdown of where candidates fall out of the process</p>
+st.markdown(f'''
+    <h3 style='margin-bottom: 0.2rem;'>{t("mp.rejection_pipeline_title")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("mp.rejection_pipeline_sub")}</p>
     <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
 ''', unsafe_allow_html=True)
 
 r1, r2 = st.columns([2, 3], gap="medium")
 
 with r1:
-    with chart_panel("Rejection Rate by Stage", height=460, subtitle="Percentage of candidates rejected at each stage"):
+    with chart_panel(t("mp.rej_rate_stage"), height=460, subtitle=t("mp.rej_rate_stage_sub")):
         stages = [
             (0, "S0", "Rejection Screening CV"),
             (1, "S2", "Rejection Study Case"),
@@ -311,7 +329,7 @@ with r1:
         )
         apply_plotly_style(fig_rej)
         fig_rej.update_layout(
-            xaxis_title="", yaxis_title="Rejection Rate (%)",
+            xaxis_title="", yaxis_title=t("mp.rej_rate_pct"),
             margin=dict(l=10, r=10, t=10, b=10),
             xaxis=dict(tickangle=-45)
         )
@@ -321,7 +339,7 @@ with r1:
         st.plotly_chart(fig_rej, use_container_width=True)
 
 with r2:
-    with chart_panel("Pipeline Flow", height=460, subtitle="Volume of candidates entering and falling out of each stage"):
+    with chart_panel(t("mp.pipeline_flow"), height=460, subtitle=t("mp.pipeline_flow_sub")):
         entered_counts = {i: 0 for i in range(6)}
         rejected_counts = {i: 0 for i in range(6)}
         placement_count = 0
@@ -330,29 +348,29 @@ with r2:
         for _, row in df_track.iterrows():
             prog = str(row['progress_student'])
             rej = str(row['rejection'])
-            
+
             if prog == 'Ghosting' or rej == 'Ghosting':
                 ghost_count += 1
                 continue
-                
+
             is_terminal = False
             is_placed = False
-            
+
             if prog == 'Placement' or rej == 'Placement':
                 is_terminal = True
                 is_placed = True
             elif 'Reject' in rej or prog == 'Rejected':
                 is_terminal = True
-                
+
             if not is_terminal:
                 # Skip candidates currently active in the pipeline (On Progress, FU, etc.)
                 continue
-                
+
             m = get_max_stage(row)
-            
+
             for i in range(m + 1):
                 entered_counts[i] += 1
-                
+
             if is_placed:
                 placement_count += 1
             else:
@@ -365,25 +383,25 @@ with r2:
             "S4",
             "S5"
         ]
-        
+
         if entered_counts[0] + ghost_count > 0:
-            wf_x = ["Resolved Candidates", "Ghosting"]
+            wf_x = [t("mp.resolved_candidates"), t("mp.wf_ghosting")]
             wf_y = [entered_counts[0] + ghost_count, -ghost_count]
             wf_measure = ["absolute", "relative"]
-            
+
             for i in range(5):
                 if i == 2:
                     continue  # Skip CDC Briefing Student (Training, no rejections)
-                wf_x.append(f"Rejected<br>{stage_names[i]}")
+                wf_x.append(f"{t('mp.wf_rejected')}<br>{stage_names[i]}")
                 wf_y.append(-rejected_counts[i])
                 wf_measure.append("relative")
-                
-            wf_x.append("Placement")
+
+            wf_x.append(t("mp.wf_placement"))
             wf_y.append(placement_count)
             wf_measure.append("total")
-            
+
             fig_wf = go.Figure(go.Waterfall(
-                name="Pipeline Attrition",
+                name=t("mp.pipeline_attrition"),
                 orientation="v",
                 measure=wf_measure,
                 x=wf_x,
@@ -395,49 +413,49 @@ with r2:
                 increasing={"marker": {"color": COLORS["primary"]}},
                 totals={"marker": {"color": COLORS["success"]}},
             ))
-            
+
             apply_plotly_style(fig_wf)
             fig_wf.update_traces(cliponaxis=False)
             fig_wf.update_layout(
-                height=380, 
+                height=380,
                 margin=dict(l=10, r=10, t=20, b=10),
                 waterfallgap=0.2,
                 showlegend=False,
-                yaxis=dict(title="Candidates", showgrid=True),
+                yaxis=dict(title=t("mp.candidates"), showgrid=True),
                 xaxis=dict(tickangle=-45)
             )
             st.plotly_chart(fig_wf, use_container_width=True)
         else:
-            st.info("No data available to construct Waterfall chart.")
+            st.info(t("mp.no_waterfall_data"))
 
-st.caption("**Stage Codes:** S0 (CV Screening), S1 (Selecting Student), S2 (Study Case), S3 (CDC Briefing), S4 (Interview User), S5 (Final Interview).")
+st.caption(t("mp.stage_codes_caption_short"))
 
-with chart_panel("Top 10 Companies by Rejection Impact", height=420, subtitle="Companies ranked by highest combined rejection volume and rate"):
+with chart_panel(t("mp.top10_rejection"), height=420, subtitle=t("mp.top10_rejection_sub")):
     company_totals = df_track.groupby("company").size().reset_index(name="Total")
     rejected_candidates = df_track[df_track["progress_student"] == "Rejected"]
     if not rejected_candidates.empty:
         rej_by_company = rejected_candidates.groupby("company").size().reset_index(name="Rejection Count")
         rej_by_company = rej_by_company.merge(company_totals, on="company")
         rej_by_company["Rejection Rate (%)"] = (rej_by_company["Rejection Count"] / rej_by_company["Total"] * 100).round(1)
-        
+
         rej_by_company["custom_label"] = rej_by_company.apply(
             lambda row: f"<b>{int(row['Rejection Count'])}</b>/{int(row['Total'])} ({row['Rejection Rate (%)']}%)", axis=1
         )
-        
+
         rej_by_company["Rank_Vol"] = rej_by_company["Rejection Count"].rank(method="min", ascending=False)
         rej_by_company["Rank_Rate"] = rej_by_company["Rejection Rate (%)"].rank(method="min", ascending=False)
         rej_by_company["Composite_Score"] = rej_by_company["Rank_Vol"] + rej_by_company["Rank_Rate"]
-        
+
         c_min = rej_by_company["Composite_Score"].min()
         c_max = rej_by_company["Composite_Score"].max()
         if c_max > c_min:
             rej_by_company["Impact Score"] = 100 * (1 - (rej_by_company["Composite_Score"] - c_min) / (c_max - c_min))
         else:
             rej_by_company["Impact Score"] = 100.0
-            
+
         top_10_rej_company = rej_by_company.sort_values(["Composite_Score", "Rejection Count"], ascending=[True, False]).head(10)
         top_10_rej_company = top_10_rej_company.sort_values(["Composite_Score", "Rejection Count"], ascending=[False, True])
-        
+
         fig_rej_comp = px.bar(
             top_10_rej_company, x="Impact Score", y="company", orientation="h",
             color_discrete_sequence=[COLORS["danger"]],
@@ -446,15 +464,15 @@ with chart_panel("Top 10 Companies by Rejection Impact", height=420, subtitle="C
         apply_plotly_style(fig_rej_comp)
         fig_rej_comp.update_layout(
             height=340, margin=dict(t=10, l=10, r=20, b=10),
-            xaxis_title="Impact Score (0-100)", yaxis_title=""
+            xaxis_title=t("mp.impact_score_axis"), yaxis_title=""
         )
         fig_rej_comp.update_traces(textposition="outside", cliponaxis=False)
-        
+
         fig_rej_comp.update_xaxes(range=[0, 115])
-        
+
         st.plotly_chart(fig_rej_comp, use_container_width=True)
     else:
-        st.info("No rejection data to display.")
+        st.info(t("mp.no_rejection_data"))
 
 section_divider()
 
@@ -462,43 +480,43 @@ section_divider()
 # Row 4: Ghosting Metrics
 # -------------------------------------------------------------
 
-st.markdown('''
-    <h3 style='margin-bottom: 0.2rem;'>Ghosting & System Detection</h3>
-    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>Impact of automated tracking vs manual labeling</p>
+st.markdown(f'''
+    <h3 style='margin-bottom: 0.2rem;'>{t("mp.ghosting_detection_title")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("mp.ghosting_detection_sub")}</p>
     <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
 ''', unsafe_allow_html=True)
 
 g2, g1 = st.columns(2, gap="medium")
 
 with g1:
-    with chart_panel("Labeling Lag Analysis", height=400, subtitle="Time difference between System Detection and CDC Label"):
+    with chart_panel(t("mp.labeling_lag"), height=400, subtitle=t("mp.labeling_lag_sub")):
         confirmed_ghost = df_ghost[df_ghost["progress_student"] == "Ghosting"].copy()
-        
+
         if not confirmed_ghost.empty:
             confirmed_ghost["last_update"] = pd.to_datetime(confirmed_ghost["last_update"], errors="coerce")
             confirmed_ghost["send_date"] = pd.to_datetime(confirmed_ghost["send_date"], errors="coerce")
-            
+
             # CDC ghosting label date - (send_date + 28)
             confirmed_ghost["lag_days"] = (confirmed_ghost["last_update"] - (confirmed_ghost["send_date"] + pd.Timedelta(days=28))).dt.days
-            
+
             confirmed_ghost = confirmed_ghost.dropna(subset=["lag_days"])
-            
+
             if not confirmed_ghost.empty:
                 std_dev = confirmed_ghost["lag_days"].std()
                 median_lag = confirmed_ghost["lag_days"].median()
-                
+
                 # Fallback to bar chart if variance is very low
                 if pd.isna(std_dev) or std_dev < 1.0 or confirmed_ghost["lag_days"].nunique() <= 2:
                     avg_system_days = 28.0
                     avg_manual_days = (confirmed_ghost["last_update"] - confirmed_ghost["send_date"]).dt.days.mean()
-                    
+
                     df_bar = pd.DataFrame({
-                        "Method": ["System Detection", "CDC Manual Label"],
+                        "Method": [t("mp.system_detection"), t("mp.cdc_manual_label")],
                         "Avg Days": [avg_system_days, avg_manual_days]
                     })
-                    
+
                     fig_gh = px.bar(df_bar, x="Method", y="Avg Days", text_auto=".1f", color="Method",
-                                 color_discrete_map={"System Detection": COLORS["danger"], "CDC Manual Label": CHART_PALETTE[0]})
+                                 color_discrete_map={t("mp.system_detection"): COLORS["danger"], t("mp.cdc_manual_label"): CHART_PALETTE[0]})
                     apply_plotly_style(fig_gh)
                     fig_gh.update_layout(height=320, margin=dict(t=10, l=10, r=10, b=10), showlegend=False)
                     st.plotly_chart(fig_gh, use_container_width=True)
@@ -506,27 +524,27 @@ with g1:
                     # Explicitly set bin size to ~5
                     min_val = confirmed_ghost["lag_days"].min()
                     max_val = confirmed_ghost["lag_days"].max()
-                    
+
                     fig_gh = px.histogram(
-                        confirmed_ghost, x="lag_days", 
+                        confirmed_ghost, x="lag_days",
                         color_discrete_sequence=[CHART_PALETTE[0]]
                     )
                     fig_gh.update_traces(xbins=dict(start=min_val, end=max_val, size=5))
                     apply_plotly_style(fig_gh)
                     fig_gh.update_layout(
                         height=320, margin=dict(t=10, l=10, r=10, b=10),
-                        xaxis_title="Lag in Days",
-                        yaxis_title="Case Count",
+                        xaxis_title=t("mp.lag_in_days"),
+                        yaxis_title=t("mp.cases"),
                         bargap=0.1
                     )
                     st.plotly_chart(fig_gh, use_container_width=True)
             else:
-                st.info("No valid date data for confirmed ghosting.")
+                st.info(t("mp.no_valid_lag_data"))
         else:
-            st.info("No confirmed Ghosting cases available.")
+            st.info(t("mp.no_confirmed_ghosting"))
 
 with g2:
-    with chart_panel("System Detection Impact", height=400, subtitle="Comparison of ghosting flags raised by CDC vs System"):
+    with chart_panel(t("mp.system_detection_impact"), height=400, subtitle=t("mp.system_detection_impact_sub")):
         if not df_ghost.empty:
             def get_granular_severity(g):
                 if g in ["Ghosting", "overdue_unlabeled_ghosting"]: return "Ghosting"
@@ -535,21 +553,21 @@ with g2:
                 elif g == "FU 2": return "FU 2"
                 elif g == "FU 1": return "FU 1"
                 return "Unknown"
-                
+
             def get_source(g):
                 if "overdue_unlabeled" in g:
-                    return "System Detected"
-                return "CDC Labeled"
+                    return t("mp.system_detected")
+                return t("mp.cdc_labeled")
 
             df_ghost["granular_severity"] = df_ghost["ghosting_check"].apply(get_granular_severity)
             df_ghost["source"] = df_ghost["ghosting_check"].apply(get_source)
 
             sev_counts = df_ghost.groupby(["source", "granular_severity"]).size().reset_index(name="Count")
-            
+
             fig_impact = px.sunburst(
                 sev_counts, path=["source", "granular_severity"], values="Count",
                 color="source",
-                color_discrete_map={"CDC Labeled": CHART_PALETTE[0], "System Detected": COLORS["danger"]},
+                color_discrete_map={t("mp.cdc_labeled"): CHART_PALETTE[0], t("mp.system_detected"): COLORS["danger"]},
                 height=320
             )
             fig_impact.update_traces(textinfo="label+percent parent")
@@ -557,33 +575,33 @@ with g2:
             fig_impact.update_layout(margin=dict(t=10, l=10, r=10, b=10))
             st.plotly_chart(fig_impact, use_container_width=True)
         else:
-            st.info("No ghosting data to display.")
+            st.info(t("mp.no_ghosting_data"))
 
-with chart_panel("Top 10 Companies by Ghosting Impact", height=420, subtitle="Companies ranked by highest combined ghosting volume and rate"):
+with chart_panel(t("mp.top10_ghosting"), height=420, subtitle=t("mp.top10_ghosting_sub")):
     if not df_ghost.empty:
         company_totals = df_track.groupby("company").size().reset_index(name="Total")
         ghost_by_company = df_ghost.groupby("company").size().reset_index(name="Ghosting Count")
         ghost_by_company = ghost_by_company.merge(company_totals, on="company")
         ghost_by_company["Ghosting Rate (%)"] = (ghost_by_company["Ghosting Count"] / ghost_by_company["Total"] * 100).round(1)
-        
+
         ghost_by_company["custom_label"] = ghost_by_company.apply(
             lambda row: f"<b>{int(row['Ghosting Count'])}</b>/{int(row['Total'])} ({row['Ghosting Rate (%)']}%)", axis=1
         )
-        
+
         ghost_by_company["Rank_Vol"] = ghost_by_company["Ghosting Count"].rank(method="min", ascending=False)
         ghost_by_company["Rank_Rate"] = ghost_by_company["Ghosting Rate (%)"].rank(method="min", ascending=False)
         ghost_by_company["Composite_Score"] = ghost_by_company["Rank_Vol"] + ghost_by_company["Rank_Rate"]
-        
+
         c_min = ghost_by_company["Composite_Score"].min()
         c_max = ghost_by_company["Composite_Score"].max()
         if c_max > c_min:
             ghost_by_company["Impact Score"] = 100 * (1 - (ghost_by_company["Composite_Score"] - c_min) / (c_max - c_min))
         else:
             ghost_by_company["Impact Score"] = 100.0
-            
+
         top_10_company = ghost_by_company.sort_values(["Composite_Score", "Ghosting Count"], ascending=[True, False]).head(10)
         top_10_company = top_10_company.sort_values(["Composite_Score", "Ghosting Count"], ascending=[False, True])
-        
+
         fig_comp = px.bar(
             top_10_company, x="Impact Score", y="company", orientation="h",
             color_discrete_sequence=[COLORS["warning"]],
@@ -592,15 +610,15 @@ with chart_panel("Top 10 Companies by Ghosting Impact", height=420, subtitle="Co
         apply_plotly_style(fig_comp)
         fig_comp.update_layout(
             height=340, margin=dict(t=10, l=10, r=20, b=10),
-            xaxis_title="Impact Score (0-100)", yaxis_title=""
+            xaxis_title=t("mp.impact_score_axis"), yaxis_title=""
         )
         fig_comp.update_traces(textposition="outside", cliponaxis=False)
-        
+
         fig_comp.update_xaxes(range=[0, 115])
-        
+
         st.plotly_chart(fig_comp, use_container_width=True)
     else:
-        st.info("No ghosting data to display.")
+        st.info(t("mp.no_ghosting_data"))
 
 section_divider()
 
@@ -608,15 +626,15 @@ section_divider()
 # Row 5: Unified Master Table & Drill Down
 # -------------------------------------------------------------
 
-st.markdown('''
-    <h3 style='margin-bottom: 0.2rem;'>Individual Student Tracker</h3>
-    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>Search and filter individual candidate pipelines</p>
+st.markdown(f'''
+    <h3 style='margin-bottom: 0.2rem;'>{t("mp.unified_table")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("mp.unified_table_sub")}</p>
     <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
 ''', unsafe_allow_html=True)
 
 with table_panel("", height=None):
     if df_all_ghosting.empty:
-        st.success("🎉 Tidak ada data kandidat aktif.")
+        st.success(t("mp.no_active_data"))
     else:
         display_cols = [
             "NIM", "student_name", "company", "position",
@@ -626,13 +644,13 @@ with table_panel("", height=None):
         with filter_bar():
             f1, f2, f3 = st.columns(3)
             with f1:
-                search_query = st.text_input("Search (Name/NIM)", "")
+                search_query = st.text_input(t("mp.search_nim"), "")
             with f2:
                 companies = sorted(df_all_ghosting["company"].dropna().unique())
-                sel_company = st.multiselect("Filter by Company", options=companies)
+                sel_company = st.multiselect(t("mp.filter_company"), options=companies)
             with f3:
                 severities = sorted(df_all_ghosting["ghosting_check"].dropna().unique())
-                sel_severity = st.multiselect("Filter by Severity", options=severities)
+                sel_severity = st.multiselect(t("mp.filter_severity"), options=severities)
 
         df_ghost_view = df_all_ghosting.copy()
 
@@ -652,7 +670,7 @@ with table_panel("", height=None):
 
         df_ghost_view = df_ghost_view.sort_values("days_since_update", ascending=False).reset_index(drop=True)
 
-        st.caption("Klik salah satu baris untuk melihat riwayat kandidat selengkapnya.")
+        st.caption(t("mp.click_row"))
 
         event = st.dataframe(
             df_ghost_view[display_cols],
@@ -673,7 +691,7 @@ with table_panel("", height=None):
 
             st.markdown("<div style='margin-top: 24px;'></div>", unsafe_allow_html=True)
             section_divider()
-            st.subheader("Student Detail Profile")
+            st.subheader(t("mp.student_detail"))
 
             if "df_student_context" not in st.session_state:
                 df_student = load_csv_table("student_all")
@@ -714,7 +732,7 @@ with table_panel("", height=None):
             df_history = df_full_history[df_full_history["NIM"].astype(str) == selected_nim].copy()
 
             if df_history.empty:
-                st.info("Kandidat ini belum memiliki riwayat aplikasi.")
+                st.info(t("mp.no_history"))
             else:
                 df_history = df_history.sort_values("last_update", ascending=False)
 

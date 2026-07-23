@@ -1,3 +1,5 @@
+# metrics - business logic for all bt computations
+
 import pandas as pd
 
 
@@ -30,31 +32,24 @@ def normalize_finish_status(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _resolve_col(df: pd.DataFrame, *candidates: str) -> str:
-    """
-    Return the first candidate column that actually exists in df, matched
-    case-insensitively. Guards against dataset casing drift (IPK vs ipk,
-    NIM vs nim) that we can't verify until the real CSVs are downloaded.
-    Raises KeyError with all candidates if none match.
-    """
+    # return the first candidate column that exists in df (case-insensitive)
     lower = {c.lower(): c for c in df.columns}
     for cand in candidates:
         if cand in df.columns:
             return cand
         if cand.lower() in lower:
             return lower[cand.lower()]
-    raise KeyError(f"None of {candidates} found in columns {list(df.columns)}")
+    raise KeyError(f"none of {candidates} found in columns {list(df.columns)}")
 
 
 def get_eligible_students(student_all: pd.DataFrame, status_student: pd.DataFrame) -> pd.DataFrame:
-    """
-    BT-06 (legacy/simple): Eligible students = status is Active.
-    Kept for backward compatibility. Prefer `get_student_eligibility`, which
-    applies the full CV / portofolio / IPK / status / ketersediaan rule.
-    """
+    # bt-06 (legacy/simple): eligible students = status is active
     df = student_all.merge(status_student, on="NIM", how="inner", suffixes=("", "_status"))
     df = df[df["status"] == "Active"]
-    keep = ["NIM", "nama", "program_studi", "semester",
-            "ipk", "status", "domisili", "ketersediaan", "tools"]
+    keep = [
+        "NIM", "nama", "program_studi", "semester",
+        "ipk", "status", "domisili", "ketersediaan", "tools",
+    ]
     return df[[c for c in keep if c in df.columns]]
 
 
@@ -68,86 +63,51 @@ def get_student_eligibility(
     require_active: bool = True,
     require_available: bool = True,
 ) -> pd.DataFrame:
-    """
-    BT-06: Determine which students are fit to send to companies.
-
-    Eligibility is DERIVED (never read from a stored `eligible` column, which
-    does not exist in the source schema) from the status_student fields:
-      - CV == "Ada"                (if require_cv)
-      - portofolio == "Ada"        (if require_portfolio)
-      - status == "Active"         (if require_active)
-      - ketersediaan == "Available"(if require_available)
-      - IPK >= ipk_min
-
-    Returns the joined student frame with two extra columns:
-      - is_eligible (bool)
-      - ineligible_reasons (str) — semicolon-joined list of failed checks,
-        empty when eligible.
-    """
+    # bt-06: determine which students are fit to send to companies
     df = student_all.merge(
         status_student, on="NIM", how="inner", suffixes=("", "_status")
     )
 
-    nama = _resolve_col(df, "nama")
-    prodi = _resolve_col(df, "program_studi")
-    sem = _resolve_col(df, "semester")
-    cv = _resolve_col(df, "CV")
-    porto = _resolve_col(df, "portofolio")
-    ipk = _resolve_col(df, "IPK", "ipk")
-    status = _resolve_col(df, "status")
-    ketersediaan = _resolve_col(df, "ketersediaan")
-    domisili = _resolve_col(df, "domisili")
-    tools = _resolve_col(df, "tools")
+    # fill missing indicator values
+    df["CV"] = df["CV"].fillna("tidak ada").astype(str).str.strip().str.lower()
+    df["portofolio"] = df["portofolio"].fillna("tidak ada").astype(str).str.strip().str.lower()
+    df["status"] = df["status"].fillna("Inactive").astype(str).str.strip()
+    df["ketersediaan"] = df["ketersediaan"].fillna("Tidak Aktif").astype(str).str.strip()
+    df["IPK"] = pd.to_numeric(df["IPK"], errors="coerce").fillna(0.0)
 
-    ipk_num = pd.to_numeric(df[ipk], errors="coerce")
+    # evaluate boolean eligibility checks
+    cond_ipk = df["IPK"] >= ipk_min
+    cond_cv = df["CV"] == "ada" if require_cv else True
+    cond_port = df["portofolio"] == "ada" if require_portfolio else True
+    cond_active = df["status"].str.lower() == "active" if require_active else True
+    cond_avail = df["ketersediaan"].str.lower() == "available" if require_available else True
 
-    checks = {}  # reason label -> boolean Series that is True when the check FAILS
-    if require_cv:
-        checks["No CV"] = df[cv].astype(str).str.strip().str.lower() != "ada"
-    if require_portfolio:
-        checks["No portfolio"] = df[porto].astype(str).str.strip().str.lower() != "ada"
-    if require_active:
-        checks["Not active"] = df[status].astype(str).str.strip().str.lower() != "active"
-    if require_available:
-        checks["Not available"] = (
-            df[ketersediaan].astype(str).str.strip().str.lower() != "available"
-        )
-    checks[f"IPK < {ipk_min:.2f}"] = ipk_num.fillna(-1) < ipk_min
+    df["is_eligible"] = cond_ipk & cond_cv & cond_port & cond_active & cond_avail
 
-    def _reasons(i):
-        return "; ".join(label for label, failed in checks.items() if bool(failed.iloc[i]))
+    # generate human-readable ineligibility reasons
+    reasons = []
+    for _, row in df.iterrows():
+        r = []
+        if not (row["IPK"] >= ipk_min):
+            r.append(f"IPK < {ipk_min:.2f} ({row['IPK']:.2f})")
+        if require_cv and row["CV"] != "ada":
+            r.append("CV belum ada")
+        if require_portfolio and row["portofolio"] != "ada":
+            r.append("Portofolio belum ada")
+        if require_active and row["status"].lower() != "active":
+            r.append(f"Status '{row['status']}'")
+        if require_available and row["ketersediaan"].lower() != "available":
+            r.append(f"Ketersediaan '{row['ketersediaan']}'")
+        reasons.append(", ".join(r) if r else "Eligible")
 
-    df["ineligible_reasons"] = [_reasons(i) for i in range(len(df))]
-    df["is_eligible"] = df["ineligible_reasons"] == ""
-
-    # Normalise the columns the page relies on to stable names.
-    out = df.rename(columns={
-        nama: "nama", prodi: "program_studi", sem: "semester",
-        ipk: "IPK", status: "status", ketersediaan: "ketersediaan",
-        domisili: "domisili", tools: "tools", cv: "CV", porto: "portofolio",
-    })
-    out["IPK"] = ipk_num
-    keep = ["NIM", "nama", "program_studi", "semester", "IPK", "CV",
-            "portofolio", "status", "ketersediaan", "domisili", "tools",
-            "is_eligible", "ineligible_reasons"]
-    return out[[c for c in keep if c in out.columns]]
+    df["ineligible_reasons"] = reasons
+    return df
 
 
 def get_student_supply_summary(
     student_all: pd.DataFrame, status_student: pd.DataFrame
 ) -> dict:
-    """
-    Page-level snapshot of the student-supply side, independent of the
-    BT-06 eligibility filter widgets. Feeds the KPI hero at the top of
-    Monitor Student.
-
-    Returns a dict:
-      - total      : number of students (student_all master rows)
-      - available  : ketersediaan == "Available" in status_student
-      - placed     : ketersediaan == "Placed"
-      - n_prodi    : distinct program_studi
-      - avg_ipk    : mean IPK (NaN-safe; None if unavailable)
-    """
+    # page-level snapshot for monitor student kpi hero row
     prodi = _resolve_col(student_all, "program_studi")
     total = int(student_all[_resolve_col(student_all, "NIM")].nunique())
     n_prodi = int(student_all[prodi].dropna().nunique())
@@ -188,23 +148,7 @@ def match_students_to_request(
     w_semester: int = 30,
     w_tools: int = 25,
 ) -> pd.DataFrame:
-    """
-    BT-01: Rank eligible students against one talent request.
-
-    `eligible` should already be filtered to eligible students (BT-06 feeds
-    BT-01). `request` is one row of talent_request.
-
-    Score (0-100) combines three signals, each contributing its weight:
-      - bidang: student's program_studi is named in the request's
-        bidang_studi_dibutuhkan (case-insensitive substring, either way).
-      - semester: student's semester >= minimum_semester.
-      - tools: fraction of the student's tools that appear in the request's
-        deskripsi_requirement (the request has no structured tools field, so
-        we text-match against the free-text requirement).
-
-    Returns eligible rows with match_bidang / match_semester / match_tools
-    (0-1 each) and match_score (0-100), sorted best-first.
-    """
+    # bt-01: rank eligible students against one talent request
     df = eligible.copy()
     if df.empty:
         df["match_score"] = []
@@ -246,10 +190,10 @@ def match_students_to_request(
     return df.sort_values("match_score", ascending=False).reset_index(drop=True)
 
 
-def get_tracking_company_summary(tracking_company: pd.DataFrame, tracking_student: pd.DataFrame) -> pd.DataFrame:
-    """
-    BT-04: Compare jumlah_permintaan, jumlah_dikirim, accepted, acceptance_rate, fulfillment_rate.
-    """
+def get_tracking_company_summary(
+    tracking_company: pd.DataFrame, tracking_student: pd.DataFrame
+) -> pd.DataFrame:
+    # bt-04: compare requested, sent, accepted, and rates per tracking_company
     accepted_counts = (
         tracking_student[tracking_student["progress_student"] == "Placement"]
         .groupby("id_tracking_company")
@@ -272,12 +216,24 @@ def get_tracking_company_summary(tracking_company: pd.DataFrame, tracking_studen
     return df
 
 
-def get_ghosting_flags(tracking_student: pd.DataFrame, tracking_company: pd.DataFrame, today: pd.Timestamp = None, include_healthy: bool = False) -> pd.DataFrame:
+def get_ghosting_flags(
+    tracking_student: pd.DataFrame,
+    tracking_company: pd.DataFrame = None,
+    today: pd.Timestamp = None,
+    include_healthy: bool = False,
+) -> pd.DataFrame:
+    # bt-05: flag candidates by ghosting severity based on days since send_date
     if today is None:
         today = pd.Timestamp.today().normalize()
 
-    df = tracking_student.merge(tracking_company[['id_tracking_company', 'send_date']], on='id_tracking_company', how='left')
-    
+    if tracking_company is not None:
+        df = tracking_student.merge(
+            tracking_company[["id_tracking_company", "send_date"]],
+            on="id_tracking_company", how="left",
+        )
+    else:
+        df = tracking_student.copy()
+
     df["send_date"] = pd.to_datetime(df["send_date"], errors="coerce")
     df["days_since_update"] = (today - df["send_date"]).dt.days
 
@@ -299,76 +255,78 @@ def get_ghosting_flags(tracking_student: pd.DataFrame, tracking_company: pd.Data
         return "Healthy"
 
     df["ghosting_check"] = df.apply(ghosting_check, axis=1)
-    
+
     if not include_healthy:
         return df[df["ghosting_check"] != "Healthy"]
-        
+
     return df
 
-# ─────────────────────────────────────────────
-#  BT-08: Data Quality Master Table
-# ─────────────────────────────────────────────
 
-def get_quality_master_data(student_all: pd.DataFrame, status_student: pd.DataFrame, reference_date: pd.Timestamp = None) -> pd.DataFrame:
-    """
-    BT-08: Combines staleness and data consistency checks into one master table.
-    - Staleness categories: Safe (<=90), Stale (91-180), Critical (>180)
-    - Consistency checks: nama, email, semester, and hp vs no_whatsapp
-    """
-    # 1. Merge the tables
-    df = student_all.merge(status_student, on="NIM", suffixes=("_all", "_status"), how="inner")
-    
-    # 2. Staleness Calculation
+def get_quality_master_data(
+    student_all: pd.DataFrame,
+    status_student: pd.DataFrame,
+    reference_date: pd.Timestamp = None,
+) -> pd.DataFrame:
+    # bt-08: combines staleness and data consistency checks into one master table
+    df = student_all.merge(
+        status_student, on="NIM", suffixes=("_all", "_status"), how="inner"
+    )
+
+    # staleness calculation
     df["sync_date"] = pd.to_datetime(df["sync_date"], dayfirst=True)
     if reference_date is None:
         reference_date = df["sync_date"].max()
     df["days_since_sync"] = (reference_date - df["sync_date"]).dt.days
-    
+
     def classify_staleness(days):
         if days > 179:
             return "Critical"
         elif days > 89:
             return "Stale"
         return "Safe"
-        
+
     df["staleness"] = df["days_since_sync"].apply(classify_staleness)
 
-    # 3. Discrepancy Checks
+    # discrepancy checks with phone normalization
     def norm_phone_all(p):
         p = str(p).strip()
-        if p.endswith(".0"): p = p[:-2]
-        if p.startswith("0"): return p[1:]
+        if p.endswith(".0"):
+            p = p[:-2]
+        if p.startswith("0"):
+            return p[1:]
         return p
 
     def norm_phone_status(p):
         p = str(p).strip()
-        if p.endswith(".0"): p = p[:-2]
-        if p.startswith("62"): return p[2:]
+        if p.endswith(".0"):
+            p = p[:-2]
+        if p.startswith("62"):
+            return p[2:]
         return p
-        
+
     hp_norm = df["hp"].apply(norm_phone_all)
     wa_norm = df["no_whatsapp"].apply(norm_phone_status)
-    
+
     email_all = df["email_kampus"].astype(str).str.lower().str.strip()
     email_status = df["email"].astype(str).str.lower().str.strip()
-    
+
     nama_all = df["nama_all"].astype(str).str.lower().str.strip()
     nama_status = df["nama_status"].astype(str).str.lower().str.strip()
-    
+
     sem_all = pd.to_numeric(df["semester_all"], errors="coerce")
     sem_status = pd.to_numeric(df["semester_status"], errors="coerce")
-    
+
     prog_all = df["program_studi_all"].astype(str).str.lower().str.strip()
     prog_status = df["program_studi_status"].astype(str).str.lower().str.strip()
-    
+
     diff_nama = nama_all != nama_status
     diff_email = email_all != email_status
     diff_semester = sem_all != sem_status
     diff_phone = hp_norm != wa_norm
     diff_prog = prog_all != prog_status
-    
+
     df["has_mismatch"] = diff_nama | diff_email | diff_semester | diff_phone | diff_prog
-    
+
     df["mismatch_types"] = ""
     df.loc[diff_nama, "mismatch_types"] += "Name, "
     df.loc[diff_email, "mismatch_types"] += "Email, "
@@ -376,5 +334,5 @@ def get_quality_master_data(student_all: pd.DataFrame, status_student: pd.DataFr
     df.loc[diff_phone, "mismatch_types"] += "Phone, "
     df.loc[diff_prog, "mismatch_types"] += "ProgStudi, "
     df["mismatch_types"] = df["mismatch_types"].str.rstrip(", ")
-    
+
     return df

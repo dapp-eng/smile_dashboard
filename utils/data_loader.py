@@ -1,3 +1,5 @@
+# data loader - csv download from gdrive and supabase client
+
 import streamlit as st
 import pandas as pd
 import gdown
@@ -10,6 +12,7 @@ DATA_DIR = "data"
 
 @st.cache_resource
 def download_csvs():
+    # download csv files from google drive if not already present
     has_csvs = (
         os.path.exists(DATA_DIR)
         and any(f.endswith(".csv") for f in os.listdir(DATA_DIR))
@@ -32,6 +35,7 @@ def download_csvs():
 
 @st.cache_data
 def load_csv_table(table_name: str) -> pd.DataFrame:
+    # load a csv table by name, auto-detecting delimiter
     csv_dir = download_csvs()
     path = os.path.join(csv_dir, f"{table_name}.csv")
     # sniff delimiter - status_student uses ';', others use ','
@@ -50,7 +54,7 @@ def load_csv_table(table_name: str) -> pd.DataFrame:
 
 
 
-# supabase - live, powers CRUD
+# supabase live connection for crud operations
 @st.cache_resource
 def get_supabase_client() -> Client:
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])

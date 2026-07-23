@@ -1,5 +1,9 @@
 [theme]
 base = "light"
+primaryColor = "#3462ED"
+backgroundColor = "#F8FAFC"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1E293B"
 font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
 headingFont = "Montserrat:https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&display=swap"
 codeFont = "monospace"
@@ -19,7 +23,7 @@ chartCategoricalColors = [
     "#6366F1", # indigo
 ]
 
-# Light mode
+# Light mode defaults
 [theme.light]
 primaryColor = "#3462ED"              # primary
 backgroundColor = "#F8FAFC"           # bg konten
@@ -30,26 +34,8 @@ borderColor = "#E2E8F0"               # border tipis
 codeBackgroundColor = "#F1F5F9"       # bg code
 codeTextColor = "#1E293B"             # font
 
-# Sidebar - light mode
-[theme.light.sidebar]
-backgroundColor = "#121F45"           # navy
-secondaryBackgroundColor = "#4748B0"  # ungu, hover/active
-textColor = "#E2E8F0"                 # teks terang
-primaryColor = "#3462ED"              # primary
-
-# Dark mode
-[theme.dark]
-primaryColor = "#3462ED"              # primary
-backgroundColor = "#0F172A"           # bg gelap
-secondaryBackgroundColor = "#1E293B"  # bg card, pakai warna font
-textColor = "#F1F5F9"                 # teks terang
-linkColor = "#5C82F0"                 # primary, lebih terang
-borderColor = "#334155"               # border gelap
-codeBackgroundColor = "#1E293B"       # bg code
-codeTextColor = "#F1F5F9"             # teks terang
-
-# Sidebar - dark mode
-[theme.dark.sidebar]
+# Sidebar defaults
+[theme.sidebar]
 backgroundColor = "#121F45"           # navy
 secondaryBackgroundColor = "#4748B0"  # ungu, hover/active
 textColor = "#E2E8F0"                 # teks terang
