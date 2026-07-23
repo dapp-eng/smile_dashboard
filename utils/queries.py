@@ -26,6 +26,29 @@ def get_student_supply_summary():
     return metrics.get_student_supply_summary(student_all, status_student)
 
 
+def get_student_profiling_data():
+    # returns a merged dataframe of student_all and status_student for demographic/skill profiling
+    student_all = load_csv_table("student_all")
+    status_student = load_csv_table("status_student")
+    import pandas as pd
+    
+    # Keep only relevant columns to avoid memory bloat
+    s_all = student_all[["NIM", "bidang_minat", "jenis_penempatan_diminati"]].copy()
+    s_status = status_student[["NIM", "semester", "program_studi", "IPK", "domisili", "tools"]].copy()
+    
+    # Convert NIM to string to ensure safe merge
+    s_all["NIM"] = s_all["NIM"].astype(str)
+    s_status["NIM"] = s_status["NIM"].astype(str)
+    
+    df = pd.merge(s_all, s_status, on="NIM", how="inner")
+    
+    # Ensure numeric columns are actually numeric
+    df["IPK"] = pd.to_numeric(df["IPK"], errors="coerce")
+    df["semester"] = pd.to_numeric(df["semester"], errors="coerce")
+    
+    return df
+
+
 def get_talent_requests():
     # read-only talent requests from the csv layer (matching source for bt-01)
     return load_csv_table("talent_request")

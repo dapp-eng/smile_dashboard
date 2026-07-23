@@ -31,20 +31,19 @@ reference_date = df_company["send_date"].max()
 df_all_ghosting = get_ghosting_flags(
     df_track, tracking_company=df_company, today=reference_date, include_healthy=True,
 )
-df_ghost = df_all_ghosting[df_all_ghosting["ghosting_check"] != "Healthy"]
+fu_ghost_set = ["FU 1", "FU 2", "FU 3", "Ghosting"]
+df_ghost = df_all_ghosting[df_all_ghosting["progress_student_system"].isin(fu_ghost_set)]
+
+
 
 # Inject system-detected flags into df_track so all top charts reflect the true system state
-mapping = {
-    "overdue_unlabeled_ghosting": "Ghosting",
-    "overdue_unlabeled_fu3": "FU 3",
-    "overdue_unlabeled_fu2": "FU 2",
-    "overdue_unlabeled_fu1": "FU 1"
-}
-sys_updates = df_all_ghosting[df_all_ghosting["ghosting_check"].str.startswith("overdue_unlabeled", na=False)]
+sys_updates = df_all_ghosting[
+    df_all_ghosting["progress_student_system"] != df_all_ghosting["progress_student"]
+]
 if not sys_updates.empty:
-    sys_updates = sys_updates.set_index("id_tracking_student")["ghosting_check"].replace(mapping)
+    overrides = sys_updates.set_index("id_tracking_student")["progress_student_system"]
     df_track.set_index("id_tracking_student", inplace=True)
-    df_track.update(pd.DataFrame({"progress_student": sys_updates}))
+    df_track.update(pd.DataFrame({"progress_student": overrides}))
     df_track.reset_index(inplace=True)
 
 if df_track.empty:
@@ -392,7 +391,7 @@ with r2:
             for i in range(5):
                 if i == 2:
                     continue  # Skip CDC Briefing Student (Training, no rejections)
-                wf_x.append(f"{t('mp.wf_rejected')}<br>{stage_names[i]}")
+                wf_x.append(t("mp.wf_rejected", stage=stage_names[i]))
                 wf_y.append(-rejected_counts[i])
                 wf_measure.append("relative")
 
@@ -430,51 +429,7 @@ with r2:
 
 st.caption(t("mp.stage_codes_caption_short"))
 
-with chart_panel(t("mp.top10_rejection"), height=420, subtitle=t("mp.top10_rejection_sub")):
-    company_totals = df_track.groupby("company").size().reset_index(name="Total")
-    rejected_candidates = df_track[df_track["progress_student"] == "Rejected"]
-    if not rejected_candidates.empty:
-        rej_by_company = rejected_candidates.groupby("company").size().reset_index(name="Rejection Count")
-        rej_by_company = rej_by_company.merge(company_totals, on="company")
-        rej_by_company["Rejection Rate (%)"] = (rej_by_company["Rejection Count"] / rej_by_company["Total"] * 100).round(1)
 
-        rej_by_company["custom_label"] = rej_by_company.apply(
-            lambda row: f"<b>{int(row['Rejection Count'])}</b>/{int(row['Total'])} ({row['Rejection Rate (%)']}%)", axis=1
-        )
-
-        rej_by_company["Rank_Vol"] = rej_by_company["Rejection Count"].rank(method="min", ascending=False)
-        rej_by_company["Rank_Rate"] = rej_by_company["Rejection Rate (%)"].rank(method="min", ascending=False)
-        rej_by_company["Composite_Score"] = rej_by_company["Rank_Vol"] + rej_by_company["Rank_Rate"]
-
-        c_min = rej_by_company["Composite_Score"].min()
-        c_max = rej_by_company["Composite_Score"].max()
-        if c_max > c_min:
-            rej_by_company["Impact Score"] = 100 * (1 - (rej_by_company["Composite_Score"] - c_min) / (c_max - c_min))
-        else:
-            rej_by_company["Impact Score"] = 100.0
-
-        top_10_rej_company = rej_by_company.sort_values(["Composite_Score", "Rejection Count"], ascending=[True, False]).head(10)
-        top_10_rej_company = top_10_rej_company.sort_values(["Composite_Score", "Rejection Count"], ascending=[False, True])
-
-        fig_rej_comp = px.bar(
-            top_10_rej_company, x="Impact Score", y="company", orientation="h",
-            color_discrete_sequence=[COLORS["danger"]],
-            text="custom_label"
-        )
-        apply_plotly_style(fig_rej_comp)
-        fig_rej_comp.update_layout(
-            height=340, margin=dict(t=10, l=10, r=20, b=10),
-            xaxis_title=t("mp.impact_score_axis"), yaxis_title=""
-        )
-        fig_rej_comp.update_traces(textposition="outside", cliponaxis=False)
-
-        fig_rej_comp.update_xaxes(range=[0, 115])
-
-        st.plotly_chart(fig_rej_comp, use_container_width=True)
-    else:
-        st.info(t("mp.no_rejection_data"))
-
-section_divider()
 
 # -------------------------------------------------------------
 # Row 4: Ghosting Metrics
@@ -489,85 +444,80 @@ st.markdown(f'''
 g2, g1 = st.columns(2, gap="medium")
 
 with g1:
-    with chart_panel(t("mp.labeling_lag"), height=400, subtitle=t("mp.labeling_lag_sub")):
-        confirmed_ghost = df_ghost[df_ghost["progress_student"] == "Ghosting"].copy()
+    with chart_panel(t("mp.sankey_title"), height=400, subtitle=t("mp.sankey_sub")):
+        if not df_ghost.empty:
+            import plotly.graph_objects as go
+            
+            df_sankey = df_ghost.copy()
+            df_sankey["source_node"] = "CDC: " + df_sankey["progress_student"]
+            df_sankey["target_node"] = "Sys: " + df_sankey["progress_student_system"]
 
-        if not confirmed_ghost.empty:
-            confirmed_ghost["last_update"] = pd.to_datetime(confirmed_ghost["last_update"], errors="coerce")
-            confirmed_ghost["send_date"] = pd.to_datetime(confirmed_ghost["send_date"], errors="coerce")
+            sankey_counts = df_sankey.groupby(["source_node", "target_node"]).size().reset_index(name="Count")
+            
+            if not sankey_counts.empty:
+                all_nodes = list(pd.concat([sankey_counts["source_node"], sankey_counts["target_node"]]).unique())
+                node_indices = {node: i for i, node in enumerate(all_nodes)}
+                
+                node_colors = []
+                for node in all_nodes:
+                    if "Ghosting" in node:
+                        node_colors.append(COLORS["danger"])
+                    elif "FU" in node:
+                        node_colors.append(COLORS["warning"])
+                    else:
+                        node_colors.append(CHART_PALETTE[0])
 
-            # CDC ghosting label date - (send_date + 28)
-            confirmed_ghost["lag_days"] = (confirmed_ghost["last_update"] - (confirmed_ghost["send_date"] + pd.Timedelta(days=28))).dt.days
-
-            confirmed_ghost = confirmed_ghost.dropna(subset=["lag_days"])
-
-            if not confirmed_ghost.empty:
-                std_dev = confirmed_ghost["lag_days"].std()
-                median_lag = confirmed_ghost["lag_days"].median()
-
-                # Fallback to bar chart if variance is very low
-                if pd.isna(std_dev) or std_dev < 1.0 or confirmed_ghost["lag_days"].nunique() <= 2:
-                    avg_system_days = 28.0
-                    avg_manual_days = (confirmed_ghost["last_update"] - confirmed_ghost["send_date"]).dt.days.mean()
-
-                    df_bar = pd.DataFrame({
-                        "Method": [t("mp.system_detection"), t("mp.cdc_manual_label")],
-                        "Avg Days": [avg_system_days, avg_manual_days]
-                    })
-
-                    fig_gh = px.bar(df_bar, x="Method", y="Avg Days", text_auto=".1f", color="Method",
-                                 color_discrete_map={t("mp.system_detection"): COLORS["danger"], t("mp.cdc_manual_label"): CHART_PALETTE[0]})
-                    apply_plotly_style(fig_gh)
-                    fig_gh.update_layout(height=320, margin=dict(t=10, l=10, r=10, b=10), showlegend=False)
-                    st.plotly_chart(fig_gh, use_container_width=True)
-                else:
-                    # Explicitly set bin size to ~5
-                    min_val = confirmed_ghost["lag_days"].min()
-                    max_val = confirmed_ghost["lag_days"].max()
-
-                    fig_gh = px.histogram(
-                        confirmed_ghost, x="lag_days",
-                        color_discrete_sequence=[CHART_PALETTE[0]]
+                fig_sankey = go.Figure(data=[go.Sankey(
+                    node = dict(
+                      pad = 15,
+                      thickness = 20,
+                      line = dict(color = "rgba(0,0,0,0)", width = 0),
+                      label = [n.replace("CDC: ", "").replace("Sys: ", "") for n in all_nodes],
+                      color = node_colors
+                    ),
+                    link = dict(
+                      source = [node_indices[src] for src in sankey_counts["source_node"]],
+                      target = [node_indices[tgt] for tgt in sankey_counts["target_node"]],
+                      value = sankey_counts["Count"],
+                      color = "rgba(180, 180, 180, 0.2)"
                     )
-                    fig_gh.update_traces(xbins=dict(start=min_val, end=max_val, size=5))
-                    apply_plotly_style(fig_gh)
-                    fig_gh.update_layout(
-                        height=320, margin=dict(t=10, l=10, r=10, b=10),
-                        xaxis_title=t("mp.lag_in_days"),
-                        yaxis_title=t("mp.cases"),
-                        bargap=0.1
-                    )
-                    st.plotly_chart(fig_gh, use_container_width=True)
+                )])
+                apply_plotly_style(fig_sankey)
+                fig_sankey.update_layout(height=320, margin=dict(t=20, l=20, r=20, b=20), font_family="'Inter', sans-serif")
+                st.plotly_chart(fig_sankey, use_container_width=True)
             else:
-                st.info(t("mp.no_valid_lag_data"))
+                st.info(t("mp.no_ghosting_data"))
         else:
-            st.info(t("mp.no_confirmed_ghosting"))
+            st.info(t("mp.no_ghosting_data"))
 
 with g2:
     with chart_panel(t("mp.system_detection_impact"), height=400, subtitle=t("mp.system_detection_impact_sub")):
         if not df_ghost.empty:
-            def get_granular_severity(g):
-                if g in ["Ghosting", "overdue_unlabeled_ghosting"]: return "Ghosting"
-                elif g in ["overdue_unlabeled_fu1", "overdue_unlabeled_fu2", "overdue_unlabeled_fu3"]: return "FU 1-3"
-                elif g == "FU 3": return "FU 3"
-                elif g == "FU 2": return "FU 2"
-                elif g == "FU 1": return "FU 1"
-                return "Unknown"
+            fu_ghost = {"FU 1", "FU 2", "FU 3", "Ghosting"}
 
-            def get_source(g):
-                if "overdue_unlabeled" in g:
-                    return t("mp.system_detected")
-                return t("mp.cdc_labeled")
+            def get_source(row):
+                cdc = row["progress_student"]
+                system = row["progress_student_system"]
+                if cdc not in fu_ghost:
+                    return t("mp.system_detected")     # CDC missed it entirely
+                elif cdc != system:
+                    return t("mp.system_corrected")    # CDC labeled, but stale
+                return t("mp.cdc_labeled")             # CDC got it right
 
-            df_ghost["granular_severity"] = df_ghost["ghosting_check"].apply(get_granular_severity)
-            df_ghost["source"] = df_ghost["ghosting_check"].apply(get_source)
+            df_ghost_chart = df_ghost.copy()
+            df_ghost_chart["severity"] = df_ghost_chart["progress_student_system"]
+            df_ghost_chart["source"] = df_ghost_chart.apply(get_source, axis=1)
 
-            sev_counts = df_ghost.groupby(["source", "granular_severity"]).size().reset_index(name="Count")
+            sev_counts = df_ghost_chart.groupby(["source", "severity"]).size().reset_index(name="Count")
 
             fig_impact = px.sunburst(
-                sev_counts, path=["source", "granular_severity"], values="Count",
+                sev_counts, path=["source", "severity"], values="Count",
                 color="source",
-                color_discrete_map={t("mp.cdc_labeled"): CHART_PALETTE[0], t("mp.system_detected"): COLORS["danger"]},
+                color_discrete_map={
+                    t("mp.cdc_labeled"): CHART_PALETTE[0],
+                    t("mp.system_detected"): COLORS["danger"],
+                    t("mp.system_corrected"): CHART_PALETTE[3],
+                },
                 height=320
             )
             fig_impact.update_traces(textinfo="label+percent parent")
@@ -633,141 +583,184 @@ st.markdown(f'''
 ''', unsafe_allow_html=True)
 
 with table_panel("", height=None):
-    if df_all_ghosting.empty:
-        st.success(t("mp.no_active_data"))
+    # Load student_all and enrich with application count + follow-up flag
+    df_student_master = load_csv_table("student_all").copy()
+
+    # Count applications per student from tracking data
+    app_counts = df_track.groupby("NIM").size().reset_index(name="applications")
+    app_counts["NIM"] = app_counts["NIM"].astype(str)
+    df_student_master["NIM"] = df_student_master["NIM"].astype(str)
+    df_student_master = df_student_master.merge(app_counts, on="NIM", how="left")
+    df_student_master["applications"] = df_student_master["applications"].fillna(0).astype(int)
+
+    # Determine if any tracking record has a follow-up severity
+    fu_labels = {"FU 1", "FU 2", "FU 3"}
+    if not df_all_ghosting.empty:
+        fu_nims = df_all_ghosting[df_all_ghosting["progress_student_system"].isin(fu_labels)]["NIM"].astype(str).unique()
+        df_student_master["has_follow_up"] = df_student_master["NIM"].isin(fu_nims).map({True: "Yes", False: "No"})
     else:
-        display_cols = [
-            "NIM", "student_name", "company", "position",
-            "jenis_penempatan", "progress_student", "ghosting_check", "days_since_update"
-        ]
+        df_student_master["has_follow_up"] = "No"
 
-        with filter_bar():
-            f1, f2, f3 = st.columns(3)
-            with f1:
-                search_query = st.text_input(t("mp.search_nim"), "")
-            with f2:
-                companies = sorted(df_all_ghosting["company"].dropna().unique())
-                sel_company = st.multiselect(t("mp.filter_company"), options=companies)
-            with f3:
-                severities = sorted(df_all_ghosting["ghosting_check"].dropna().unique())
-                sel_severity = st.multiselect(t("mp.filter_severity"), options=severities)
+    display_cols = [
+        "NIM", "nama", "program_studi", "semester",
+        "bidang_minat", "jenis_penempatan_diminati", "applications", "has_follow_up"
+    ]
 
-        df_ghost_view = df_all_ghosting.copy()
+    with filter_bar():
+        f1, f2, f3 = st.columns(3)
+        with f1:
+            search_query = st.text_input(t("mp.search_nim"), "")
+        with f2:
+            prodi_list = sorted(df_student_master["program_studi"].dropna().unique())
+            sel_prodi = st.multiselect(t("mp.filter_prodi"), options=prodi_list)
+        with f3:
+            fu_options = ["Yes", "No"]
+            sel_fu = st.multiselect(t("mp.filter_has_fu"), options=fu_options)
 
-        if search_query:
-            query = search_query.lower()
-            mask = (
-                df_ghost_view["student_name"].str.lower().str.contains(query, na=False) |
-                df_ghost_view["NIM"].astype(str).str.contains(query, na=False)
-            )
-            df_ghost_view = df_ghost_view[mask]
+    df_master_view = df_student_master.copy()
 
-        if sel_company:
-            df_ghost_view = df_ghost_view[df_ghost_view["company"].isin(sel_company)]
-
-        if sel_severity:
-            df_ghost_view = df_ghost_view[df_ghost_view["ghosting_check"].isin(sel_severity)]
-
-        df_ghost_view = df_ghost_view.sort_values("days_since_update", ascending=False).reset_index(drop=True)
-
-        st.caption(t("mp.click_row"))
-
-        event = st.dataframe(
-            df_ghost_view[display_cols],
-            use_container_width=True,
-            hide_index=True,
-            on_select="rerun",
-            selection_mode="single-row",
-            column_config={
-                "days_since_update": st.column_config.NumberColumn("Days Since Activity"),
-                "ghosting_check": st.column_config.TextColumn("Severity")
-            }
+    if search_query:
+        query = search_query.lower()
+        mask = (
+            df_master_view["nama"].str.lower().str.contains(query, na=False) |
+            df_master_view["NIM"].astype(str).str.contains(query, na=False)
         )
+        df_master_view = df_master_view[mask]
 
-        selected_rows = event.selection.rows
-        if selected_rows:
-            selected_idx = selected_rows[0]
-            selected_nim = str(df_ghost_view.iloc[selected_idx]["NIM"])
+    if sel_prodi:
+        df_master_view = df_master_view[df_master_view["program_studi"].isin(sel_prodi)]
 
-            st.markdown("<div style='margin-top: 24px;'></div>", unsafe_allow_html=True)
-            section_divider()
-            st.subheader(t("mp.student_detail"))
+    if sel_fu:
+        df_master_view = df_master_view[df_master_view["has_follow_up"].isin(sel_fu)]
 
-            if "df_student_context" not in st.session_state:
-                df_student = load_csv_table("student_all")
-                df_status = load_csv_table("status_student")
-                st.session_state["df_student_context"] = df_student.merge(df_status, on="NIM", how="inner", suffixes=("", "_status"))
+    df_master_view = df_master_view.sort_values("applications", ascending=False).reset_index(drop=True)
 
-            df_student_context = st.session_state["df_student_context"]
+    st.caption(t("mp.click_row"))
 
-            student_info = df_student_context[df_student_context["NIM"].astype(str) == selected_nim]
-            if not student_info.empty:
-                student_info = student_info.iloc[0]
-                st.markdown(
-                    f"""
-                    <div class="smile-panel" style="margin-bottom: 24px;">
-                        <h4 style="margin-top: 0; margin-bottom: 16px; color: var(--smile-accent, #3462ED); font-family: 'Montserrat', sans-serif;">{student_info['nama']}</h4>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; font-family: 'Inter', sans-serif; font-size: 14px;">
-                            <div><strong style="opacity:0.7">NIM:</strong><br>{student_info['NIM']}</div>
-                            <div><strong style="opacity:0.7">Program Studi:</strong><br>{student_info['program_studi']}</div>
-                            <div><strong style="opacity:0.7">Semester:</strong><br>{student_info['semester']}</div>
-                            <div><strong style="opacity:0.7">IPK:</strong><br>{student_info.get('IPK', student_info.get('ipk', '-'))}</div>
-                            <div><strong style="opacity:0.7">Status:</strong><br>{student_info.get('status', '-')}</div>
-                            <div><strong style="opacity:0.7">Domisili:</strong><br>{student_info.get('domisili', '-')}</div>
-                        </div>
+    event = st.dataframe(
+        df_master_view[display_cols],
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        column_config={
+            "nama": st.column_config.TextColumn(t("mp.col_name")),
+            "program_studi": st.column_config.TextColumn(t("mp.col_prodi")),
+            "semester": st.column_config.NumberColumn(t("mp.col_semester")),
+            "bidang_minat": st.column_config.TextColumn(t("mp.col_interest")),
+            "jenis_penempatan_diminati": st.column_config.TextColumn(t("mp.col_placement_type")),
+            "applications": st.column_config.NumberColumn(t("mp.col_applications")),
+            "has_follow_up": st.column_config.TextColumn(t("mp.col_has_fu")),
+        }
+    )
+
+    selected_rows = event.selection.rows
+    if selected_rows:
+        selected_idx = selected_rows[0]
+        selected_nim = str(df_master_view.iloc[selected_idx]["NIM"])
+
+        st.markdown("<div style='margin-top: 24px;'></div>", unsafe_allow_html=True)
+        section_divider()
+        st.subheader(t("mp.student_detail"))
+
+        if "df_student_context" not in st.session_state:
+            df_student = load_csv_table("student_all")
+            df_status = load_csv_table("status_student")
+            st.session_state["df_student_context"] = df_student.merge(df_status, on="NIM", how="inner", suffixes=("", "_status"))
+
+        df_student_context = st.session_state["df_student_context"]
+
+        student_info = df_student_context[df_student_context["NIM"].astype(str) == selected_nim]
+        if not student_info.empty:
+            student_info = student_info.iloc[0]
+            st.markdown(
+                f"""
+                <div class="smile-panel" style="margin-bottom: 24px;">
+                    <h4 style="margin-top: 0; margin-bottom: 16px; color: var(--smile-accent, #3462ED); font-family: 'Montserrat', sans-serif;">{student_info['nama']}</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; font-family: 'Inter', sans-serif; font-size: 14px;">
+                        <div><strong style="opacity:0.7">NIM:</strong><br>{student_info['NIM']}</div>
+                        <div><strong style="opacity:0.7">Program Studi:</strong><br>{student_info['program_studi']}</div>
+                        <div><strong style="opacity:0.7">Semester:</strong><br>{student_info['semester']}</div>
+                        <div><strong style="opacity:0.7">IPK:</strong><br>{student_info.get('IPK', student_info.get('ipk', '-'))}</div>
+                        <div><strong style="opacity:0.7">Status:</strong><br>{student_info.get('status', '-')}</div>
+                        <div><strong style="opacity:0.7">Domisili:</strong><br>{student_info.get('domisili', '-')}</div>
                     </div>
-                    """, unsafe_allow_html=True
-                )
+                </div>
+                """, unsafe_allow_html=True
+            )
 
-            df_full_history = df_track.merge(df_company[['id_tracking_company', 'send_date']], on='id_tracking_company', how='left')
-            if not df_all_ghosting.empty and 'id_tracking_student' in df_all_ghosting.columns:
-                df_full_history = df_full_history.merge(df_all_ghosting[['id_tracking_student', 'ghosting_check', 'days_since_update']], on='id_tracking_student', how='left')
-            else:
-                df_full_history["ghosting_check"] = "-"
-                df_full_history["days_since_update"] = 0
+        df_full_history = df_track.merge(df_company[['id_tracking_company', 'send_date']], on='id_tracking_company', how='left')
+        if not df_all_ghosting.empty and 'id_tracking_student' in df_all_ghosting.columns:
+            df_full_history = df_full_history.merge(df_all_ghosting[['id_tracking_student', 'progress_student_system', 'days_since_update']], on='id_tracking_student', how='left')
+        else:
+            df_full_history["progress_student_system"] = df_full_history["progress_student"]
+            df_full_history["days_since_update"] = 0
 
-            df_full_history["ghosting_check"] = df_full_history["ghosting_check"].fillna("-")
-            df_full_history["days_since_update"] = df_full_history["days_since_update"].fillna(0)
+        df_full_history["progress_student_system"] = df_full_history["progress_student_system"].fillna(df_full_history["progress_student"])
+        df_full_history["days_since_update"] = df_full_history["days_since_update"].fillna(0).astype(int)
 
-            df_history = df_full_history[df_full_history["NIM"].astype(str) == selected_nim].copy()
+        df_history = df_full_history[df_full_history["NIM"].astype(str) == selected_nim].copy()
 
-            if df_history.empty:
-                st.info(t("mp.no_history"))
-            else:
-                df_history = df_history.sort_values("last_update", ascending=False)
+        if df_history.empty:
+            st.info(t("mp.no_history"))
+        else:
+            df_history = df_history.sort_values("last_update", ascending=False)
 
-                html_rows = []
-                for _, row in df_history.iterrows():
-                    prog = str(row["progress_student"])
-                    color = PROGRESS_COLORS.get(prog, COLORS["neutral"])
-                    badge_html = f'<span style="background-color: {color}; border-radius: 12px; padding: 4px 10px; color: white; font-size: 12px; font-weight: 600; white-space: nowrap;">{prog}</span>'
+            def format_date_readable(val):
+                """Format date to '1 January, 1970' style."""
+                try:
+                    dt = pd.to_datetime(val, format="mixed", dayfirst=True)
+                    if pd.notnull(dt):
+                        return dt.strftime("%-d %B, %Y") if hasattr(dt, 'strftime') else str(dt)
+                except Exception:
+                    pass
+                return "-"
 
-                    send_dt = pd.to_datetime(row["send_date"]).strftime("%Y-%m-%d") if pd.notnull(row["send_date"]) else "-"
-                    last_dt = pd.to_datetime(row["last_update"], format="mixed", dayfirst=True).strftime("%Y-%m-%d") if pd.notnull(row["last_update"]) else "-"
+            # Windows strftime doesn't support %-d, use %#d instead
+            import platform
+            def fmt_date(val):
+                try:
+                    dt = pd.to_datetime(val, format="mixed", dayfirst=True)
+                    if pd.notnull(dt):
+                        if platform.system() == "Windows":
+                            return dt.strftime("%#d %B, %Y")
+                        return dt.strftime("%-d %B, %Y")
+                except Exception:
+                    pass
+                return "-"
 
-                    ghost_check = row.get('ghosting_check', '-')
+            html_rows = []
+            for _, row in df_history.iterrows():
+                prog = str(row.get('progress_student_system', row.get("progress_student", "-")))
+                color = PROGRESS_COLORS.get(prog, COLORS["neutral"])
+                badge_html = f'<span style="background-color: {color}; border-radius: 12px; padding: 4px 10px; color: white; font-size: 12px; font-weight: 600; white-space: nowrap;">{prog}</span>'
 
-                    html_rows.append(f"""<tr style="border-bottom: 1px solid var(--border-color);">
+                send_dt = fmt_date(row["send_date"])
+                last_dt = fmt_date(row["last_update"])
+                days_since = int(row.get("days_since_update", 0))
+
+                html_rows.append(f"""<tr style="border-bottom: 1px solid var(--border-color);">
     <td style="padding: 12px 16px;">{row.get('company', '-')}</td>
     <td style="padding: 12px 16px;">{row.get('position', '-')}</td>
     <td style="padding: 12px 16px;">{row.get('jenis_penempatan', '-')}</td>
     <td style="padding: 12px 16px;">{badge_html}</td>
     <td style="padding: 12px 16px;">{send_dt}</td>
     <td style="padding: 12px 16px;">{last_dt}</td>
-    <td style="padding: 12px 16px;">{ghost_check}</td>
+    <td style="padding: 12px 16px; text-align: center;">{days_since}</td>
 </tr>""")
 
-                table_html = f"""<div class="smile-panel" style="padding: 0; overflow-x: auto; margin-bottom: 0;">
+            th_style = 'padding: 14px 16px; border-bottom: 2px solid var(--border-color); color: var(--text-color); opacity: 0.8; font-weight: 600;'
+            table_html = f"""<div class="smile-panel" style="padding: 0; overflow-x: auto; margin-bottom: 0;">
     <table style="width: 100%; border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 14px; text-align: left;">
         <thead>
             <tr style="background-color: rgba(0,0,0,0.02);">
-                <th style="padding: 14px 16px; border-bottom: 2px solid var(--border-color); color: var(--text-color); opacity: 0.8; font-weight: 600;">Company</th>
-                <th style="padding: 14px 16px; border-bottom: 2px solid var(--border-color); color: var(--text-color); opacity: 0.8; font-weight: 600;">Position</th>
-                <th style="padding: 14px 16px; border-bottom: 2px solid var(--border-color); color: var(--text-color); opacity: 0.8; font-weight: 600;">Type</th>
-                <th style="padding: 14px 16px; border-bottom: 2px solid var(--border-color); color: var(--text-color); opacity: 0.8; font-weight: 600;">Progress</th>
-                <th style="padding: 14px 16px; border-bottom: 2px solid var(--border-color); color: var(--text-color); opacity: 0.8; font-weight: 600;">Send Date</th>
-                <th style="padding: 14px 16px; border-bottom: 2px solid var(--border-color); color: var(--text-color); opacity: 0.8; font-weight: 600;">Last Update</th>
-                <th style="padding: 14px 16px; border-bottom: 2px solid var(--border-color); color: var(--text-color); opacity: 0.8; font-weight: 600;">Severity</th>
+                <th style="{th_style}">Company</th>
+                <th style="{th_style}">Position</th>
+                <th style="{th_style}">Type</th>
+                <th style="{th_style}">Progress</th>
+                <th style="{th_style}">Send Date</th>
+                <th style="{th_style}">Last Update</th>
+                <th style="{th_style}; text-align: center;">Days Since Activity</th>
             </tr>
         </thead>
         <tbody>
@@ -775,4 +768,5 @@ with table_panel("", height=None):
         </tbody>
     </table>
 </div>"""
-                st.markdown(table_html, unsafe_allow_html=True)
+            st.markdown(table_html, unsafe_allow_html=True)
+

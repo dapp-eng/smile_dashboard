@@ -124,16 +124,21 @@ _TRANSLATIONS = {
     "ms.ineligible": {"id": "Ineligible", "en": "Ineligible"},
     "ms.avg_ipk_eligible": {"id": "Rata-rata IPK (eligible)", "en": "Average GPA (eligible)"},
     "ms.chart_elig_prodi": {"id": "Eligible vs Ineligible per Program Studi", "en": "Eligible vs Ineligible by Study Program"},
+    "ms.chart_elig_prodi_sub": {"id": "Perbandingan jumlah mahasiswa yang memenuhi syarat per program studi", "en": "Comparison of eligible students per study program"},
     "ms.chart_elig_comp": {"id": "Komposisi Kelayakan", "en": "Eligibility Composition"},
+    "ms.chart_elig_comp_sub": {"id": "Persentase keseluruhan mahasiswa yang memenuhi syarat", "en": "Overall percentage of eligible students"},
     "ms.student_count": {"id": "Jumlah mahasiswa", "en": "Number of students"},
     "ms.no_data_scope": {"id": "Tidak ada data untuk scope ini.", "en": "No data for this scope."},
     "ms.detail_title": {"id": "Detail Mahasiswa", "en": "Student Details"},
+    "ms.detail_title_sub": {"id": "Daftar lengkap status kelayakan mahasiswa", "en": "Complete list of student eligibility status"},
     "ms.showing_students": {"id": "Menampilkan {count} mahasiswa.", "en": "Showing {count} students."},
     "ms.matching_title": {"id": "Matching Talent", "en": "Talent Matching"},
     "ms.matching_caption": {
         "id": "Pilih talent request untuk meranking mahasiswa eligible terhadap kebutuhan prodi, semester, dan tools yang diminta.",
         "en": "Select a talent request to rank eligible students against its required study program, semester, and tools.",
     },
+    "ms.matching_kpi_title": {"id": "Ringkasan Pencocokan", "en": "Matching Overview"},
+    "ms.matching_kpi_sub": {"id": "Ringkasan jumlah kandidat eligible terhadap kebutuhan headcount", "en": "Overview of eligible candidates against requested headcount"},
     "ms.no_requests": {"id": "Belum ada talent request pada dataset.", "en": "No talent requests found in the dataset."},
     "ms.talent_request": {"id": "Talent request", "en": "Talent request"},
     "ms.detail_request": {"id": "Detail Permintaan", "en": "Request Details"},
@@ -152,6 +157,19 @@ _TRANSLATIONS = {
     "ms.perfect_match": {"id": "Cocok sempurna (100)", "en": "Perfect match (100)"},
     "ms.headcount_requested": {"id": "Headcount diminta", "en": "Headcount requested"},
     "ms.rank_title": {"id": "Peringkat Kandidat", "en": "Candidate Rankings"},
+    "ms.rank_title_sub": {"id": "Hasil pencocokan mahasiswa berdasarkan kriteria yang dipilih", "en": "Student matching results based on selected criteria"},
+    "ms.profiling_section": {"id": "Profil Mahasiswa", "en": "Student Profiling"},
+    "ms.profiling_caption": {"id": "Ringkasan demografi dan keahlian seluruh talenta di sistem", "en": "Overview of demographics and skills for all talents in the system"},
+    "ms.chart_interest": {"id": "Bidang Minat", "en": "Field of Interest"},
+    "ms.chart_interest_sub": {"id": "Minat utama mahasiswa", "en": "Primary student interests"},
+    "ms.chart_placement_pref": {"id": "Preferensi Penempatan", "en": "Placement Preference"},
+    "ms.chart_placement_pref_sub": {"id": "Jenis penempatan yang diinginkan", "en": "Desired placement types"},
+    "ms.chart_domicile": {"id": "Sebaran Domisili", "en": "Domicile Distribution"},
+    "ms.chart_domicile_sub": {"id": "Kota tempat tinggal mahasiswa saat ini", "en": "Current student residence cities"},
+    "ms.chart_semester": {"id": "Sebaran Semester", "en": "Semester Distribution"},
+    "ms.chart_semester_sub": {"id": "Distribusi tingkat semester mahasiswa", "en": "Distribution of student semester levels"},
+    "ms.chart_tools": {"id": "Keahlian & Tools Terpopuler", "en": "Most Popular Skills & Tools"},
+    "ms.chart_tools_sub": {"id": "Tools yang paling banyak dikuasai mahasiswa", "en": "Most commonly mastered tools by students"},
 
     # monitor company page
     "mc.caption": {
@@ -169,12 +187,29 @@ _TRANSLATIONS = {
     "mc.fulfillment_rate": {"id": "Tingkat Pemenuhan", "en": "Fulfillment Rate"},
     "mc.avg_response": {"id": "Rata-rata Waktu Respons", "en": "Avg Response Time"},
     "mc.chart_industry": {"id": "Permintaan berdasarkan Sektor Industri", "en": "Requests by Industry Sector"},
+    "mc.chart_industry_sub": {"id": "Distribusi permintaan talent berdasarkan sektor industri", "en": "Talent request distribution by industry sector"},
     "mc.chart_type_dist": {"id": "Distribusi Jenis Penempatan", "en": "Placement Type Distribution"},
+    "mc.chart_type_dist_sub": {"id": "Komposisi jenis penempatan yang ditawarkan", "en": "Composition of offered placement types"},
     "mc.chart_monthly": {"id": "Tren Permintaan Bulanan", "en": "Monthly Request Trend"},
+    "mc.chart_monthly_sub": {"id": "Volume permintaan talent dari waktu ke waktu", "en": "Talent request volume over time"},
     "mc.chart_pipeline": {"id": "Pipeline Progress Permintaan", "en": "Request Progress Pipeline"},
+    "mc.chart_pipeline_sub": {"id": "Status penyelesaian seluruh talent request saat ini", "en": "Current completion status of all talent requests"},
     "mc.chart_top_companies": {"id": "Top 15 Perusahaan berdasarkan Volume Permintaan", "en": "Top 15 Companies by Request Volume"},
+    "mc.chart_top_companies_sub": {"id": "Perusahaan dengan jumlah permintaan talent terbanyak", "en": "Companies with the highest number of talent requests"},
     "mc.chart_working_arr": {"id": "Distribusi Working Arrangement", "en": "Working Arrangement Distribution"},
+    "mc.chart_working_arr_sub": {"id": "Komposisi model kerja (WFO, WFH, Hybrid)", "en": "Working arrangement composition (WFO, WFH, Hybrid)"},
+    "mc.top10_placement": {"id": "10 Perusahaan Teratas berdasarkan Dampkat Penempatan", "en": "Top 10 Companies by Placement Impact"},
+    "mc.top10_placement_sub": {
+        "id": "Perusahaan diurutkan berdasarkan volume dan tingkat penempatan (Placement) tertinggi",
+        "en": "Companies ranked by highest combined placement volume and rate",
+    },
+    "mc.top10_rejection": {"id": "10 Perusahaan Teratas berdasarkan Dampak Penolakan", "en": "Top 10 Companies by Rejection Impact"},
+    "mc.top10_rejection_sub": {
+        "id": "Perusahaan diurutkan berdasarkan volume dan tingkat penolakan tertinggi",
+        "en": "Companies ranked by highest combined rejection volume and rate",
+    },
     "mc.detail_title": {"id": "Detail Talent Request", "en": "Talent Request Details"},
+    "mc.detail_title_sub": {"id": "Daftar lengkap seluruh talent request beserta statusnya", "en": "Complete list of all talent requests and their status"},
     "mc.search_placeholder": {"id": "Ketik nama perusahaan atau posisi", "en": "Type company name or position"},
     "mc.search_label": {"id": "Cari perusahaan atau posisi...", "en": "Search company or position..."},
     "mc.no_data_filter": {"id": "Tidak ada data yang sesuai dengan filter yang dipilih.", "en": "No data matches the selected filters."},
@@ -204,11 +239,20 @@ _TRANSLATIONS = {
     "mp.ghosting_proportion": {"id": "Proporsi Ghosting", "en": "Ghosting Proportion"},
     "mp.fu_severity": {"id": "Tingkat Keparahan Follow-Up", "en": "Follow-Up Severity"},
     "mp.cases": {"id": "Kasus", "en": "Cases"},
-    "mp.unified_table": {"id": "Tabel Utama Kandidat", "en": "Unified Master Table"},
+    "mp.unified_table": {"id": "Tabel ", "en": "Unified Master Table"},
     "mp.no_active_data": {"id": "Tidak ada data kandidat aktif.", "en": "No active candidate data."},
     "mp.search_nim": {"id": "Cari (Nama/NIM)", "en": "Search (Name/NIM)"},
     "mp.filter_company": {"id": "Filter Perusahaan", "en": "Filter by Company"},
     "mp.filter_severity": {"id": "Filter Keparahan", "en": "Filter by Severity"},
+    "mp.filter_prodi": {"id": "Filter Program Studi", "en": "Filter by Program"},
+    "mp.filter_has_fu": {"id": "Filter Follow-Up", "en": "Filter by Follow-Up"},
+    "mp.col_name": {"id": "Nama", "en": "Name"},
+    "mp.col_prodi": {"id": "Program Studi", "en": "Program"},
+    "mp.col_semester": {"id": "Semester", "en": "Semester"},
+    "mp.col_interest": {"id": "Bidang Minat", "en": "Interest"},
+    "mp.col_placement_type": {"id": "Jenis Penempatan", "en": "Placement Type"},
+    "mp.col_applications": {"id": "Jumlah Lamaran", "en": "Applications"},
+    "mp.col_has_fu": {"id": "Ada Follow-Up?", "en": "Has Follow-Up?"},
     "mp.click_row": {"id": "Klik salah satu baris untuk melihat riwayat kandidat selengkapnya.", "en": "Click a row to view the candidate's full history."},
     "mp.student_detail": {"id": "Detail Profil Mahasiswa", "en": "Student Detail Profile"},
     "mp.no_history": {"id": "Kandidat ini belum memiliki riwayat aplikasi.", "en": "This candidate has no application history yet."},
@@ -257,15 +301,11 @@ _TRANSLATIONS = {
         "id": "Volume kandidat yang masuk dan gugur di setiap tahapan",
         "en": "Volume of candidates entering and falling out of each stage",
     },
-    "mp.top10_rejection": {"id": "10 Perusahaan Teratas berdasarkan Dampak Penolakan", "en": "Top 10 Companies by Rejection Impact"},
-    "mp.top10_rejection_sub": {
-        "id": "Perusahaan diurutkan berdasarkan volume dan tingkat penolakan tertinggi",
-        "en": "Companies ranked by highest combined rejection volume and rate",
-    },
-    "mp.labeling_lag": {"id": "Analisis Keterlambatan Pelabelan", "en": "Labeling Lag Analysis"},
-    "mp.labeling_lag_sub": {
-        "id": "Selisih waktu antara Deteksi Sistem dan Label CDC",
-        "en": "Time difference between System Detection and CDC Label",
+
+    "mp.sankey_title": {"id": "Alur Eskalasi Sistem", "en": "System Escalation Flow"},
+    "mp.sankey_sub": {
+        "id": "Perubahan status dari Label CDC menjadi Deteksi Sistem",
+        "en": "Status transition from CDC Label to System Detection",
     },
     "mp.system_detection_impact": {"id": "Dampak Deteksi Sistem", "en": "System Detection Impact"},
     "mp.system_detection_impact_sub": {
@@ -277,6 +317,9 @@ _TRANSLATIONS = {
         "id": "Perusahaan diurutkan berdasarkan volume dan tingkat ghosting tertinggi",
         "en": "Companies ranked by highest combined ghosting volume and rate",
     },
+    "mp.cdc_labeled": {"id": "Label CDC", "en": "CDC Labeled"},
+    "mp.system_detected": {"id": "Deteksi Sistem", "en": "System Detected"},
+    "mp.system_corrected": {"id": "Koreksi Sistem", "en": "System Corrected"},
 
     # --- small labels / empty-state messages ---
     "mp.stage_cat_filter": {"id": "Filter Kategori", "en": "Category Filter"},
@@ -285,7 +328,7 @@ _TRANSLATIONS = {
     "mp.no_valid_lag_data": {"id": "Tidak ada data tanggal valid untuk ghosting yang dikonfirmasi.", "en": "No valid date data for confirmed ghosting."},
     "mp.no_confirmed_ghosting": {"id": "Tidak ada kasus Ghosting yang dikonfirmasi.", "en": "No confirmed Ghosting cases available."},
 
-    "mp.stage_codes_note": {
+    "mp.stage_codes_caption": {
         "id": (
             "**Kode Tahapan:** S0 (Screening CV), S1 (Seleksi Mahasiswa), S2 (Studi Kasus), "
             "S3 (Briefing CDC), S4 (Interview User), S5 (Interview Final). "
@@ -297,7 +340,7 @@ _TRANSLATIONS = {
             "**'R.' prefix in Sunburst** denotes Rejection at that stage."
         ),
     },
-    "mp.stage_codes_note_short": {
+    "mp.stage_codes_caption_short": {
         "id": (
             "**Kode Tahapan:** S0 (Screening CV), S1 (Seleksi Mahasiswa), S2 (Studi Kasus), "
             "S3 (Briefing CDC), S4 (Interview User), S5 (Interview Final)."
@@ -307,13 +350,24 @@ _TRANSLATIONS = {
             "S3 (CDC Briefing), S4 (Interview User), S5 (Final Interview)."
         ),
     },
-
+    "mp.resolved_candidates": {"id": "Kandidat Tuntas", "en": "Resolved Candidates"},
+    "mp.wf_ghosting": {"id": "Ghosting", "en": "Ghosting"},
+    "mp.wf_rejected": {"id": "Ditolak<br>{stage}", "en": "Rejected<br>{stage}"},
+    "mp.wf_placement": {"id": "Penempatan", "en": "Placement"},
     "mp.stage_cat_filter": {"id": "Filter Kategori", "en": "Category Filter"},
     "mp.cat_all": {"id": "Semua", "en": "All"},
     "mp.cat_active": {"id": "Aktif", "en": "Active"},
     "mp.cat_followup": {"id": "Follow-Up", "en": "Follow-Up"},
     "mp.cat_finished": {"id": "Selesai", "en": "Finished"},
     "mp.cat_rejected": {"id": "Ditolak", "en": "Rejected"},
+    "mp.stages": {"id": "Tahapan", "en": "Stages"},
+    "mp.impact_score_axis": {"id": "Skor Dampak (0-100)", "en": "Impact Score (0-100)"},
+    "mp.lag_in_days": {"id": "Selisih Hari", "en": "Lag in Days"},
+    "mp.unified_table_sub": {
+        "id": "Tabel gabungan seluruh kandidat yang sedang dilacak beserta status ghosting-nya",
+        "en": "Combined table of all tracked candidates and their ghosting status",
+    },
+
     # data sync page
     "ds.caption": {
         "id": "Pemeriksaan sinkronisasi data mahasiswa untuk validasi kelengkapan dan kebaruan",

@@ -84,7 +84,7 @@ def overview_page():
     df_ghost_all = metrics.get_ghosting_flags(
         df_ts, tracking_company=df_tc, today=reference_date, include_healthy=True
     )
-    df_ghost_only = df_ghost_all[df_ghost_all["ghosting_check"] != "Healthy"]
+    df_ghost_only = df_ghost_all[df_ghost_all["progress_student_system"].isin(["FU 1", "FU 2", "FU 3", "Ghosting"])]
     total_ghosted = len(df_ghost_only)
     finished = ["Placement", "Rejected", "Finish"]
     active_in_process = len(df_ts[~df_ts["progress_student"].isin(finished)])
@@ -288,13 +288,10 @@ def overview_page():
                 try:
                     from utils.pdf_report import generate_report_pdf
 
-                    fu_labels = [
-                        "FU 1", "FU 2", "FU 3",
-                        "overdue_unlabeled_fu1", "overdue_unlabeled_fu2", "overdue_unlabeled_fu3",
-                    ]
-                    ghost_labels = ["Ghosting", "overdue_unlabeled_ghosting"]
-                    total_fu = len(df_ghost_only[df_ghost_only["ghosting_check"].isin(fu_labels)]) if not df_ghost_only.empty else 0
-                    total_ghost_strict = len(df_ghost_only[df_ghost_only["ghosting_check"].isin(ghost_labels)]) if not df_ghost_only.empty else 0
+                    fu_labels = ["FU 1", "FU 2", "FU 3"]
+                    ghost_labels = ["Ghosting"]
+                    total_fu = len(df_ghost_only[df_ghost_only["progress_student_system"].isin(fu_labels)]) if not df_ghost_only.empty else 0
+                    total_ghost_strict = len(df_ghost_only[df_ghost_only["progress_student_system"].isin(ghost_labels)]) if not df_ghost_only.empty else 0
 
                     df_quality = queries.get_data_quality_master()
 

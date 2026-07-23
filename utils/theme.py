@@ -179,7 +179,7 @@ def apply_plotly_style(fig):
         if trace.type == "sankey":
             if hasattr(trace, "node") and isinstance(trace.node, dict):
                 trace.node["font"] = dict(color=font_color, family="Inter, sans-serif", size=12)
-        elif trace.type not in ("pie", "sunburst", "funnel", "waterfall", "sankey"):
+        elif trace.type not in ("pie", "sunburst", "funnel", "waterfall", "sankey", "treemap"):
             trace.update(cliponaxis=False)
 
     return fig

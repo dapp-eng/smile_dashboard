@@ -240,24 +240,31 @@ def get_ghosting_flags(
     finished_statuses = ["Placement", "Rejected", "Unresolved"]
     df = df[~df["progress_student"].isin(finished_statuses)]
 
-    def ghosting_check(row):
-        if row["progress_student"] in ["FU 1", "FU 2", "FU 3", "Ghosting"]:
+    def calc_system_progress(row):
+        days = row["days_since_update"]
+        if pd.isna(days):
             return row["progress_student"]
-        elif row["progress_student"] == "Selecting Student by Company":
-            if row["days_since_update"] > 28:
-                return "overdue_unlabeled_ghosting"
-            elif row["days_since_update"] > 21:
-                return "overdue_unlabeled_fu3"
-            elif row["days_since_update"] > 14:
-                return "overdue_unlabeled_fu2"
-            elif row["days_since_update"] > 7:
-                return "overdue_unlabeled_fu1"
-        return "Healthy"
 
-    df["ghosting_check"] = df.apply(ghosting_check, axis=1)
+        # Only check ghosting for first stage and CDC-labeled FU/Ghosting
+        check_stages = {"Selecting Student by Company", "FU 1", "FU 2", "FU 3", "Ghosting"}
+        if row["progress_student"] not in check_stages:
+            return row["progress_student"]
+
+        if days > 28:
+            return "Ghosting"
+        elif days > 21:
+            return "FU 3"
+        elif days > 14:
+            return "FU 2"
+        elif days > 7:
+            return "FU 1"
+        return row["progress_student"]
+
+    df["progress_student_system"] = df.apply(calc_system_progress, axis=1)
 
     if not include_healthy:
-        return df[df["ghosting_check"] != "Healthy"]
+        fu_ghost = ["FU 1", "FU 2", "FU 3", "Ghosting"]
+        return df[df["progress_student_system"].isin(fu_ghost)]
 
     return df
 

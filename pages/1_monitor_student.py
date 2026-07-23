@@ -8,7 +8,7 @@ from utils.layout import (
     page_header, filter_bar, metric_strip, chart_panel,
     table_panel, panel, card_grid, section_divider, inject_global_css,
 )
-from utils.theme import COLORS, apply_plotly_style
+from utils.theme import COLORS, apply_plotly_style, CHART_PALETTE
 from utils.i18n import t
 from utils import queries, metrics
 
@@ -36,9 +36,100 @@ metric_strip([
 
 section_divider()
 
+# bt-00: student profiling section
+st.markdown(f'''
+    <h3 style='margin-bottom: 0.2rem;'>{t("ms.profiling_section")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("ms.profiling_caption")}</p>
+    <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
+''', unsafe_allow_html=True)
+
+df_prof = queries.get_student_profiling_data()
+
+# Row 1: Field of Interest (Treemap) | Placement Preference (Donut)
+c_prof_1, c_prof_2 = card_grid(2)
+with c_prof_1:
+    with chart_panel(t("ms.chart_interest"), subtitle=t("ms.chart_interest_sub"), height=420):
+        if df_prof.empty:
+            st.info("No data")
+        else:
+            interest_counts = df_prof["bidang_minat"].value_counts().reset_index()
+            interest_counts.columns = ["Interest", "Count"]
+            interest_counts["Root"] = "Semua Minat"
+            fig_interest = px.treemap(
+                interest_counts, path=["Root", "Interest"], values="Count",
+                color="Interest", color_discrete_sequence=CHART_PALETTE
+            )
+            apply_plotly_style(fig_interest)
+            fig_interest.update_layout(height=360, margin=dict(t=30, l=10, r=10, b=30))
+            st.plotly_chart(fig_interest, use_container_width=True)
+
+with c_prof_2:
+    with chart_panel(t("ms.chart_tools"), subtitle=t("ms.chart_tools_sub"), height=420):
+        if df_prof.empty:
+            st.info("No data")
+        else:
+            tools_series = df_prof["tools"].dropna().astype(str)
+            all_tools = []
+            for tools_list in tools_series:
+                all_tools.extend([t.strip() for t in tools_list.split(",") if t.strip()])
+            tools_df = pd.Series(all_tools).value_counts().head(10).reset_index()
+            tools_df.columns = ["Tool", "Count"]
+            tools_df = tools_df.sort_values("Count", ascending=True)
+            
+            fig_tools = px.bar(
+                tools_df, x="Count", y="Tool", orientation="h",
+                text="Count", color="Count", color_continuous_scale="Blues"
+            )
+            apply_plotly_style(fig_tools)
+            fig_tools.update_layout(height=360, margin=dict(t=10, l=10, r=20, b=0), xaxis_title="", yaxis_title="")
+            fig_tools.update_traces(textposition="outside", cliponaxis=False)
+            st.plotly_chart(fig_tools, use_container_width=True)
+
+st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
+
+# Row 2: Top Domiciles (Bar) | Semester Distribution (Column)
+c_prof_3, c_prof_4 = card_grid(2)
+with c_prof_3:
+    with chart_panel(t("ms.chart_domicile"), subtitle=t("ms.chart_domicile_sub"), height=420):
+        if df_prof.empty:
+            st.info("No data")
+        else:
+            dom_counts = df_prof["domisili"].value_counts().head(10).reset_index()
+            dom_counts.columns = ["Domicile", "Count"]
+            dom_counts = dom_counts.sort_values("Count", ascending=True)
+            fig_dom = px.bar(
+                dom_counts, x="Count", y="Domicile", orientation="h",
+                text="Count", color_discrete_sequence=[COLORS["primary"]]
+            )
+            apply_plotly_style(fig_dom)
+            fig_dom.update_layout(height=360, margin=dict(t=10, l=10, r=20, b=0), xaxis_title="", yaxis_title="")
+            fig_dom.update_traces(textposition="outside", cliponaxis=False)
+            st.plotly_chart(fig_dom, use_container_width=True)
+
+with c_prof_4:
+    with chart_panel(t("ms.chart_placement_pref"), subtitle=t("ms.chart_placement_pref_sub"), height=420):
+        if df_prof.empty:
+            st.info("No data")
+        else:
+            pref_counts = df_prof["jenis_penempatan_diminati"].value_counts().reset_index()
+            pref_counts.columns = ["Preference", "Count"]
+            fig_pref = px.pie(
+                pref_counts, names="Preference", values="Count", hole=0.5,
+                color_discrete_sequence=px.colors.sequential.Blues_r
+            )
+            fig_pref.update_traces(textposition="outside", textinfo="label+percent", pull=[0.02]*len(pref_counts))
+            apply_plotly_style(fig_pref)
+            fig_pref.update_layout(height=360, showlegend=True, margin=dict(t=30, b=30))
+            st.plotly_chart(fig_pref, use_container_width=True)
+
+section_divider()
+
 # bt-06: eligibility section
-st.markdown(f"### {t('ms.eligibility_title')}")
-st.caption(f"{t('ms.eligibility_caption')} (BT-06)")
+st.markdown(f'''
+    <h3 style='margin-bottom: 0.2rem;'>{t("ms.eligibility_title")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("ms.eligibility_caption")} (BT-06)</p>
+    <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
+''', unsafe_allow_html=True)
 
 with filter_bar():
     ipk_min = st.slider(t("ms.min_ipk"), 0.0, 4.0, 3.0, 0.05)
@@ -103,7 +194,7 @@ section_divider()
 left, right = card_grid(2)
 
 with left:
-    with chart_panel(t("ms.chart_elig_prodi"), height=430):
+    with chart_panel(t("ms.chart_elig_prodi"), height=430, subtitle=t("ms.chart_elig_prodi_sub")):
         by_prodi = (
             scope.assign(elig=scope["is_eligible"].map({True: "Eligible", False: "Ineligible"}))
             .groupby(["program_studi", "elig"]).size().reset_index(name="jumlah")
@@ -127,7 +218,7 @@ with left:
             st.plotly_chart(fig, use_container_width=True)
 
 with right:
-    with chart_panel(t("ms.chart_elig_comp"), height=430):
+    with chart_panel(t("ms.chart_elig_comp"), height=430, subtitle=t("ms.chart_elig_comp_sub")):
         comp = (
             scope["is_eligible"].map({True: "Eligible", False: "Ineligible"})
             .value_counts().reset_index()
@@ -146,7 +237,7 @@ with right:
             apply_plotly_style(fig)
             st.plotly_chart(fig, use_container_width=True)
 
-with table_panel(t("ms.detail_title"), height=430):
+with table_panel(t("ms.detail_title"), height=430, subtitle=t("ms.detail_title_sub")):
     st.caption(t("ms.showing_students", count=f"{len(view_df):,}"))
     show_cols = [c for c in [
         "NIM", "nama", "program_studi", "semester", "IPK", "CV", "portofolio",
@@ -166,8 +257,11 @@ with table_panel(t("ms.detail_title"), height=430):
 
 # bt-01: talent matching section
 section_divider()
-st.markdown(f"### {t('ms.matching_title')}")
-st.caption(f"{t('ms.matching_caption')} (BT-01)")
+st.markdown(f'''
+    <h3 style='margin-bottom: 0.2rem;'>{t("ms.matching_title")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("ms.matching_caption")} (BT-01)</p>
+    <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
+''', unsafe_allow_html=True)
 
 requests = queries.get_talent_requests()
 
@@ -188,14 +282,23 @@ else:
         return default if pd.isna(val) else val
 
     with panel(t("ms.detail_request")):
-        d1, d2, d3, d4 = st.columns(4)
-        d1.metric(t("ms.position"), _f("nama_posisi"))
-        d2.metric(t("ms.type"), _f("jenis_penempatan"))
-        d3.metric(t("ms.headcount"), _f("headcount"))
-        d4.metric(t("ms.min_semester"), _f("minimum_semester"))
-        st.markdown(f"**{t('ms.field_required')}:** {_f('bidang_studi_dibutuhkan')}")
+        def _box(title, val, align="center"):
+            return f"""<div style="background:var(--bg-color); border:1px solid var(--border-color); border-radius:12px; padding:16px; text-align:{align}; box-shadow:0 1px 2px rgba(0,0,0,0.02); margin-bottom:16px;">
+                <div style="font-size:12px; font-weight:700; color:var(--text-color); opacity:0.7; margin-bottom:8px; text-transform:uppercase; font-family:'Inter',sans-serif;">{title}</div>
+                <div style="font-size:16px; font-weight:600; color:var(--text-color); line-height:1.4; font-family:'Montserrat',sans-serif;">{val}</div>
+            </div>"""
+            
+        d1, d2, d3, d4 = st.columns([3, 2, 2, 4])
+        d1.markdown(_box(t('ms.position'), _f('nama_posisi')), unsafe_allow_html=True)
+        d2.markdown(_box(t('ms.type'), _f('jenis_penempatan')), unsafe_allow_html=True)
+        d3.markdown(_box(t('ms.min_semester'), _f('minimum_semester')), unsafe_allow_html=True)
+        d4.markdown(_box(t('ms.field_required'), _f('bidang_studi_dibutuhkan')), unsafe_allow_html=True)
+        
         if str(_f("deskripsi_requirement")) not in ("\u2014", ""):
-            st.markdown(f"**{t('ms.requirement')}:** {_f('deskripsi_requirement')}")
+            d_full = st.columns(1)[0]
+            d_full.markdown(_box(t('ms.requirement'), _f('deskripsi_requirement'), align="left"), unsafe_allow_html=True)
+
+    st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
 
     eligible_only = df[df["is_eligible"]]
     matches = metrics.match_students_to_request(eligible_only, req)
@@ -209,6 +312,13 @@ else:
             headcount = 0
         strong = int((matches["match_score"] >= 70).sum())
         perfect = int((matches["match_score"] >= 100).sum())
+
+        st.markdown(f'''
+            <div class="smile-panel-title" style="margin-top:-20px; margin-bottom:12px; padding-bottom:4px;">
+                {t("ms.matching_kpi_title")}
+                <div style='font-family: "Inter", sans-serif; font-size: 12px; color: var(--text-color); opacity: 0.65; margin: 4px 0 0 0; font-weight: 400; text-transform: none; letter-spacing: normal;'>{t("ms.matching_kpi_sub")}</div>
+            </div>
+        ''', unsafe_allow_html=True)
 
         metric_strip([
             {"label": t("ms.candidates_eligible"), "value": f"{len(matches):,}"},
@@ -224,9 +334,9 @@ else:
             },
         ])
 
-        section_divider()
+        st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
 
-        with table_panel(t("ms.rank_title"), height=430):
+        with table_panel(t("ms.rank_title"), height=430, subtitle=t("ms.rank_title_sub")):
             cols = [c for c in [
                 "NIM", "nama", "program_studi", "semester", "IPK", "tools",
                 "match_bidang", "match_semester", "match_tools", "match_score",
