@@ -1,4 +1,4 @@
-# design tokens - colors match [theme] in .streamlit/config.toml
+# design tokens and plotly styling for the smile dashboard
 
 import streamlit as st
 
@@ -17,21 +17,21 @@ COLORS = {
     "border": "#E2E8F0",
 }
 
-# sequential blue-derived palette - red/green/yellow reserved for status only
+# sequential blue palette for charts (red/green/yellow reserved for status)
 CHART_PALETTE = [
-    "#3462ED",  # primary blue
-    "#4748B0",  # purple
-    "#5B7FFF",  # soft blue
-    "#1E3A8A",  # dark blue
-    "#7C93ED",  # periwinkle
-    "#2D3B87",  # deep navy
-    "#818CF8",  # lavender
-    "#6366F1",  # indigo
-    "#93A8FF",  # light periwinkle
-    "#4F46E5",  # violet
+    "#3462ED",
+    "#4748B0",
+    "#5B7FFF",
+    "#1E3A8A",
+    "#7C93ED",
+    "#2D3B87",
+    "#818CF8",
+    "#6366F1",
+    "#93A8FF",
+    "#4F46E5",
 ]
 
-# status colors - alerts and thresholds only
+# status colors for alerts and thresholds
 STATUS_COLORS = {
     "success": COLORS["success"],
     "warning": COLORS["warning"],
@@ -76,7 +76,7 @@ ELIGIBLE_COLORS = {
     "Tidak Aktif": COLORS["neutral"],
 }
 
-# pipeline stage colors for tracking_company
+# pipeline stage colors for tracking_company progress
 PIPELINE_COLORS = {
     "Draft": CHART_PALETTE[4],
     "Submitted": CHART_PALETTE[6],
@@ -85,11 +85,35 @@ PIPELINE_COLORS = {
     "Closed": COLORS["neutral"],
 }
 
-# plotly layout base - do not set paper_bgcolor/plot_bgcolor/font.color here
-# streamlit theme handles those for light/dark mode compat
+# staleness status colors for data synchronization (bt-08)
+STALENESS_COLORS = {
+    "Safe": CHART_PALETTE[0],
+    "Stale": CHART_PALETTE[1],
+    "Critical": CHART_PALETTE[2],
+}
+
+
+def _is_dark_mode() -> bool:
+    # check whether the app is currently in dark mode
+    return st.session_state.get("theme_mode", "light") == "dark"
+
+
+def get_font_color() -> str:
+    # return appropriate text color for the active theme mode
+    return "#F1F5F9" if _is_dark_mode() else "#1E293B"
+
+
+def get_bg_transparent() -> str:
+    # return transparent background string for plotly charts
+    return "rgba(0,0,0,0)"
+
+
+# plotly layout base - paper/plot bg transparent so charts follow container
 PLOTLY_LAYOUT = dict(
     font=dict(family="Inter, sans-serif", size=12),
     margin=dict(t=40, b=40, l=40, r=20),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
     hoverlabel=dict(
         bgcolor=COLORS["navy"],
         font_color="#FFFFFF",
@@ -108,15 +132,54 @@ PLOTLY_LAYOUT = dict(
 
 
 def apply_plotly_style(fig):
-    fig.update_layout(**PLOTLY_LAYOUT)
-    # cliponaxis only for cartesian traces - invalid on pie/donut
+    # apply consistent plotly styling with theme-aware font color
+    font_color = get_font_color()
+
+    layout_updates = {
+        **PLOTLY_LAYOUT,
+        "template": "plotly_white",
+        "font": dict(family="Inter, sans-serif", size=12, color=font_color),
+        "legend": dict(
+            font=dict(color=font_color),
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+        ),
+    }
+
+    # only update title font if a non-empty title text is already present on the figure
+    if fig.layout.title and fig.layout.title.text:
+        layout_updates["title"] = dict(
+            text=fig.layout.title.text,
+            font=dict(family="Montserrat, sans-serif", size=16, color=font_color),
+        )
+
+    fig.update_layout(**layout_updates)
+
+    fig.update_xaxes(
+        color=font_color,
+        title_font=dict(color=font_color),
+        tickfont=dict(color=font_color),
+        gridcolor="rgba(128,128,128,0.15)",
+        zerolinecolor="rgba(128,128,128,0.2)",
+    )
+    fig.update_yaxes(
+        color=font_color,
+        title_font=dict(color=font_color),
+        tickfont=dict(color=font_color),
+        gridcolor="rgba(128,128,128,0.15)",
+        zerolinecolor="rgba(128,128,128,0.2)",
+    )
+
     for trace in fig.data:
-        if trace.type not in ("pie", "sunburst", "funnel", "waterfall", "sankey"):
+        if hasattr(trace, "textfont"):
+            trace.update(textfont=dict(color=font_color))
+        if trace.type == "sankey":
+            if hasattr(trace, "node") and isinstance(trace.node, dict):
+                trace.node["font"] = dict(color=font_color, family="Inter, sans-serif", size=12)
+        elif trace.type not in ("pie", "sunburst", "funnel", "waterfall", "sankey"):
             trace.update(cliponaxis=False)
+
     return fig
-
-
-def apply_style():
-    # backward compat
-    from utils.layout import inject_global_css
-    inject_global_css()
