@@ -1,13 +1,15 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 from utils.layout import (
     inject_global_css, page_header, metric_strip, chart_panel,
     filter_bar, table_panel, panel, card_grid, section_divider,
 )
-from utils.theme import COLORS, CHART_PALETTE, apply_plotly_style
+from utils.theme import COLORS, CHART_PALETTE, apply_plotly_style, REJECTION_COLORS
 from utils.queries import get_data_quality_master
+from utils.data_loader import load_csv_table
 
 # Page setup
 inject_global_css()
@@ -295,3 +297,132 @@ with table_panel("Master Quality Data", height=500):
         hide_index=True
     )
     st.caption(f"Showing {len(filtered_df)} of {total_students} total records")
+
+section_divider()
+
+# -------------------------------------------------------------
+# Row 8: "Finish" Status Reclassification Analysis
+# -------------------------------------------------------------
+df_tracking = load_csv_table("tracking_student")
+df_finish = df_tracking[df_tracking["_original_progress"] == "Finish"].copy()
+
+if not df_finish.empty:
+    st.markdown('''
+        <h3 style='margin-bottom: 0.2rem;'>"Finish" Status Reclassification</h3>
+        <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>
+            The raw data used "Finish" as a catch-all close-out status. We reclassify these records using the <code>rejection</code> column to reveal the true outcome.
+        </p>
+        <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
+    ''', unsafe_allow_html=True)
+
+    total_finish = len(df_finish)
+    unresolved_count = len(df_finish[df_finish["progress_student"] == "Unresolved"])
+    reclassified_count = total_finish - unresolved_count
+
+    metric_strip([
+        {"label": "Total \"Finish\" Records", "value": f"{total_finish:,}"},
+        {"label": "Reclassified", "value": f"{reclassified_count:,}", "sentiment": "success"},
+        {"label": "Truly Unresolved", "value": f"{unresolved_count:,}", "sentiment": "warning"},
+        {"label": "Unresolved Rate", "value": f"{unresolved_count / total_finish * 100:.1f}%", "sentiment": "warning"},
+    ])
+
+    section_divider()
+
+    dq1, dq2 = st.columns([1, 1], gap="medium")
+
+    with dq1:
+        with chart_panel("Original Rejection Values", height=420, subtitle="What the rejection column actually said for 'Finish' records"):
+            rej_counts = df_finish["rejection"].value_counts().reset_index()
+            rej_counts.columns = ["rejection", "count"]
+
+            rej_color_map = {
+                "On Progress": COLORS["warning"],
+                "Placement": COLORS["success"],
+                "Ghosting": COLORS["neutral"],
+                "Rejection Interview User": COLORS["danger"],
+                "Rejection Screening CV": COLORS["danger"],
+                "Rejection Study Case": COLORS["danger"],
+                "Rejection Final Interview": COLORS["danger"],
+            }
+
+            fig_donut = px.pie(
+                rej_counts, names="rejection", values="count",
+                color="rejection", color_discrete_map=rej_color_map,
+                hole=0.45, height=340
+            )
+            fig_donut.update_traces(textinfo="label+percent", textposition="outside")
+            apply_plotly_style(fig_donut)
+            fig_donut.update_layout(
+                margin=dict(l=10, r=10, t=10, b=10),
+                showlegend=False
+            )
+            st.plotly_chart(fig_donut, use_container_width=True)
+
+    with dq2:
+        with chart_panel("Reclassification Flow", height=420, subtitle="How 'Finish' records were remapped to their true outcomes"):
+            # Build Sankey: Finish → rejection value → reclassified status
+            reclass_map = {
+                "Placement": "Placement",
+                "Ghosting": "Ghosting",
+                "On Progress": "Unresolved",
+                "Rejection Interview User": "Rejected",
+                "Rejection Screening CV": "Rejected",
+                "Rejection Study Case": "Rejected",
+                "Rejection Final Interview": "Rejected",
+            }
+            df_finish["reclassified"] = df_finish["rejection"].map(reclass_map).fillna("Unresolved")
+
+            # Nodes: [0] Finish, [1-N] rejection values, [N+1-M] reclassified statuses
+            rejections = df_finish["rejection"].value_counts().index.tolist()
+            reclassified = df_finish["reclassified"].value_counts().index.tolist()
+
+            nodes = ["Finish"] + rejections + reclassified
+            node_indices = {name: i for i, name in enumerate(nodes)}
+
+            # Node colors
+            node_color_map = {
+                "Finish": COLORS["neutral"],
+                "On Progress": COLORS["warning"],
+                "Placement": COLORS["success"],
+                "Ghosting": CHART_PALETTE[4],
+                "Rejection Interview User": COLORS["danger"],
+                "Rejection Screening CV": COLORS["danger"],
+                "Rejection Study Case": COLORS["danger"],
+                "Rejection Final Interview": COLORS["danger"],
+                "Rejected": COLORS["danger"],
+                "Unresolved": COLORS["warning"],
+            }
+            node_colors = [node_color_map.get(n, COLORS["neutral"]) for n in nodes]
+
+            sources, targets, values = [], [], []
+
+            # Links: Finish → rejection values
+            for rej, count in df_finish["rejection"].value_counts().items():
+                sources.append(node_indices["Finish"])
+                targets.append(node_indices[rej])
+                values.append(count)
+
+            # Links: rejection values → reclassified statuses
+            flow = df_finish.groupby(["rejection", "reclassified"]).size().reset_index(name="count")
+            for _, row in flow.iterrows():
+                sources.append(node_indices[row["rejection"]])
+                targets.append(node_indices[row["reclassified"]])
+                values.append(row["count"])
+
+            fig_sankey = go.Figure(go.Sankey(
+                node=dict(
+                    pad=20, thickness=20,
+                    label=nodes,
+                    color=node_colors,
+                ),
+                link=dict(
+                    source=sources, target=targets, value=values,
+                    color="rgba(150,150,150,0.25)"
+                )
+            ))
+            apply_plotly_style(fig_sankey)
+            fig_sankey.update_layout(
+                height=340,
+                margin=dict(l=10, r=10, t=10, b=10),
+            )
+            st.plotly_chart(fig_sankey, use_container_width=True)

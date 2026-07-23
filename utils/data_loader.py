@@ -39,7 +39,15 @@ def load_csv_table(table_name: str) -> pd.DataFrame:
         sample = f.read(2048)
     import csv
     dialect = csv.Sniffer().sniff(sample)
-    return pd.read_csv(path, sep=dialect.delimiter, encoding="utf-8-sig")
+    df = pd.read_csv(path, sep=dialect.delimiter, encoding="utf-8-sig")
+
+    # Normalize 'Finish' status using the rejection column
+    if table_name == "tracking_student":
+        from utils.metrics import normalize_finish_status
+        df = normalize_finish_status(df)
+
+    return df
+
 
 
 # supabase - live, powers CRUD

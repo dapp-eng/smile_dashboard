@@ -1,6 +1,34 @@
 import pandas as pd
 
 
+def normalize_finish_status(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Reclassify 'Finish' in progress_student using the rejection column.
+
+    The raw data uses 'Finish' as a catch-all close-out status regardless of
+    the actual outcome. The rejection column holds the real outcome, so we
+    use it to remap:
+        Finish + Placement          → Placement
+        Finish + Ghosting           → Ghosting
+        Finish + Rejection *        → Rejected
+        Finish + On Progress / else → Unresolved
+
+    The original value is preserved in '_original_progress' so the
+    data-quality page can still surface these records.
+    """
+    df = df.copy()
+    df["_original_progress"] = df["progress_student"]
+
+    mask = df["progress_student"] == "Finish"
+    df.loc[mask & (df["rejection"] == "Placement"), "progress_student"] = "Placement"
+    df.loc[mask & (df["rejection"] == "Ghosting"), "progress_student"] = "Ghosting"
+    df.loc[mask & df["rejection"].str.contains("Reject", na=False), "progress_student"] = "Rejected"
+    # Remaining Finish rows (typically rejection == "On Progress")
+    df.loc[df["progress_student"] == "Finish", "progress_student"] = "Unresolved"
+
+    return df
+
+
 def _resolve_col(df: pd.DataFrame, *candidates: str) -> str:
     """
     Return the first candidate column that actually exists in df, matched
@@ -253,22 +281,22 @@ def get_ghosting_flags(tracking_student: pd.DataFrame, tracking_company: pd.Data
     df["send_date"] = pd.to_datetime(df["send_date"], errors="coerce")
     df["days_since_update"] = (today - df["send_date"]).dt.days
 
-    finished_statuses = ["Placement", "Rejected", "Finish"]
+    finished_statuses = ["Placement", "Rejected", "Unresolved"]
     df = df[~df["progress_student"].isin(finished_statuses)]
 
     def ghosting_check(row):
         if row["progress_student"] in ["FU 1", "FU 2", "FU 3", "Ghosting"]:
             return row["progress_student"]
-        elif row["days_since_update"] > 28:
-            return "overdue_unlabeled_ghosting"
-        elif row["days_since_update"] > 21:
-            return "overdue_unlabeled_fu3"
-        elif row["days_since_update"] > 14:
-            return "overdue_unlabeled_fu2"
-        elif row["days_since_update"] > 7:
-            return "overdue_unlabeled_fu1"
-        else:
-            return "Healthy"
+        elif row["progress_student"] == "Selecting Student by Company":
+            if row["days_since_update"] > 28:
+                return "overdue_unlabeled_ghosting"
+            elif row["days_since_update"] > 21:
+                return "overdue_unlabeled_fu3"
+            elif row["days_since_update"] > 14:
+                return "overdue_unlabeled_fu2"
+            elif row["days_since_update"] > 7:
+                return "overdue_unlabeled_fu1"
+        return "Healthy"
 
     df["ghosting_check"] = df.apply(ghosting_check, axis=1)
     

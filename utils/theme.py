@@ -51,7 +51,7 @@ PROGRESS_COLORS = {
     "FU 3": STATUS_COLORS["warning"],
     "Ghosting": STATUS_COLORS["danger"],
     "Rejected": STATUS_COLORS["danger"],
-    "Finish": COLORS["neutral"],
+    "Unresolved": COLORS["neutral"],
 }
 
 REJECTION_COLORS = {

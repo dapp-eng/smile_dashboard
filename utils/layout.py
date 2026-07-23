@@ -389,11 +389,12 @@ def filter_bar():
 
 
 @contextmanager
-def chart_panel(title="", height=420):
+def chart_panel(title="", height=420, subtitle=""):
     # chart container with optional title
     if title:
+        subtitle_html = f"<div style='font-family: \"Inter\", sans-serif; font-size: 12px; color: var(--text-color); opacity: 0.65; margin: 4px 0 0 0; font-weight: 400; text-transform: none; letter-spacing: normal;'>{subtitle}</div>" if subtitle else ""
         st.markdown(
-            f'<p class="smile-panel-title" style="margin-bottom:12px;">{title}</p>',
+            f'<div class="smile-panel-title" style="margin-bottom:12px;">{title}{subtitle_html}</div>',
             unsafe_allow_html=True,
         )
     yield
