@@ -429,6 +429,55 @@ with r2:
 
 st.caption(t("mp.stage_codes_caption_short"))
 
+with chart_panel(t("mc.top10_rejection"), height=460, subtitle=t("mc.top10_rejection_sub")):
+    company_totals = df_track.groupby("company").size().reset_index(name="Total")
+    rejected_candidates = df_track[df_track["progress_student"] == "Rejected"]
+    if not rejected_candidates.empty:
+        rej_by_company = rejected_candidates.groupby("company").size().reset_index(name="Rejection Count")
+        rej_by_company = rej_by_company.merge(company_totals, on="company")
+        rej_by_company["Rejection Rate (%)"] = (rej_by_company["Rejection Count"] / rej_by_company["Total"] * 100).round(1)
+
+        rej_by_company["custom_label"] = rej_by_company.apply(
+            lambda row: f"{int(row['Rejection Count'])}/{int(row['Total'])} ({row['Rejection Rate (%)']}%)", axis=1
+        )
+
+        rej_by_company["Rank_Vol"] = rej_by_company["Rejection Count"].rank(method="min", ascending=False)
+        rej_by_company["Rank_Rate"] = rej_by_company["Rejection Rate (%)"].rank(method="min", ascending=False)
+        rej_by_company["Composite_Score"] = rej_by_company["Rank_Vol"] + rej_by_company["Rank_Rate"]
+
+        c_min = rej_by_company["Composite_Score"].min()
+        c_max = rej_by_company["Composite_Score"].max()
+        if c_max > c_min:
+            rej_by_company["Impact Score"] = 100 * (1 - (rej_by_company["Composite_Score"] - c_min) / (c_max - c_min))
+        else:
+            rej_by_company["Impact Score"] = 100.0
+
+        top_10_rej = rej_by_company.sort_values(["Composite_Score", "Rejection Count"], ascending=[True, False]).head(10)
+        top_10_rej = top_10_rej.sort_values(["Composite_Score", "Rejection Count"], ascending=[False, True])
+
+        fig_rej = px.bar(
+            top_10_rej, x="Impact Score", y="company", orientation="h",
+            color="Impact Score", color_continuous_scale=["#37A2B9", "#3462ED"],
+            text="custom_label"
+        )
+        fig_rej.update_traces(textposition='outside', cliponaxis=False)
+
+        apply_plotly_style(fig_rej)
+        fig_rej.update_layout(
+            height=380, margin=dict(t=10, l=10, r=40, b=10),
+            xaxis_title=t("mp.impact_score_axis"), 
+            yaxis=dict(
+                title="",
+                showticklabels=True
+            ),
+            coloraxis_showscale=False
+        )
+        fig_rej.update_xaxes(range=[80, 108])
+
+        st.plotly_chart(fig_rej, use_container_width=True)
+    else:
+        st.info("No rejection data available.")
+
 
 section_divider()
 # -------------------------------------------------------------

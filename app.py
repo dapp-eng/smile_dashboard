@@ -120,7 +120,60 @@ def overview_page():
 
     section_divider()
 
-    # charts row 1: placement by type + monthly trend
+    # charts row 1: top 10 placement rate
+    with chart_panel(t("mc.top10_placement"), height=460, subtitle=t("mc.top10_placement_sub")):
+        company_totals = df_ts.groupby("company").size().reset_index(name="Total")
+        placed_candidates = df_ts[df_ts["progress_student"] == "Placement"]
+        
+        if not placed_candidates.empty:
+            place_by_company = placed_candidates.groupby("company").size().reset_index(name="Placement Count")
+            place_by_company = place_by_company.merge(company_totals, on="company")
+            place_by_company["Placement Rate (%)"] = (place_by_company["Placement Count"] / place_by_company["Total"] * 100).round(1)
+
+            place_by_company["custom_label"] = place_by_company.apply(
+                lambda row: f"{int(row['Placement Count'])}/{int(row['Total'])} ({row['Placement Rate (%)']}%)", axis=1
+            )
+
+            place_by_company["Rank_Vol"] = place_by_company["Placement Count"].rank(method="min", ascending=False)
+            place_by_company["Rank_Rate"] = place_by_company["Placement Rate (%)"].rank(method="min", ascending=False)
+            place_by_company["Composite_Score"] = place_by_company["Rank_Vol"] + place_by_company["Rank_Rate"]
+
+            c_min = place_by_company["Composite_Score"].min()
+            c_max = place_by_company["Composite_Score"].max()
+            if c_max > c_min:
+                place_by_company["Impact Score"] = 100 * (1 - (place_by_company["Composite_Score"] - c_min) / (c_max - c_min))
+            else:
+                place_by_company["Impact Score"] = 100.0
+
+            top_10_place = place_by_company.sort_values(["Composite_Score", "Placement Count"], ascending=[True, False]).head(10)
+            top_10_place = top_10_place.sort_values(["Composite_Score", "Placement Count"], ascending=[False, True])
+
+            fig_place = px.bar(
+                top_10_place, x="Impact Score", y="company", orientation="h",
+                color="Impact Score", color_continuous_scale=["#37A2B9", "#3462ED"],
+                text="custom_label"
+            )
+            fig_place.update_traces(textposition='outside', cliponaxis=False)
+
+            apply_plotly_style(fig_place)
+            fig_place.update_layout(
+                height=380, margin=dict(t=10, l=10, r=40, b=10),
+                xaxis_title=t("mp.impact_score_axis"), 
+                yaxis=dict(
+                    title="",
+                    showticklabels=True
+                ),
+                coloraxis_showscale=False
+            )
+            fig_place.update_xaxes(range=[80, 108])
+
+            st.plotly_chart(fig_place, use_container_width=True)
+        else:
+            st.info("No placement data available.")
+
+    section_divider()
+
+    # charts row 2: placement by type + monthly trend
     col_l, col_r = card_grid(2)
 
     with col_l:
@@ -179,7 +232,7 @@ def overview_page():
 
     section_divider()
 
-    # charts row 2: top companies + placement by prodi
+    # charts row 3: top companies + placement by prodi
     col_l2, col_r2 = card_grid(2)
 
     with col_l2:
@@ -226,7 +279,7 @@ def overview_page():
 
     section_divider()
 
-    # charts row 3: selection stage breakdown (process monitor) + data health summary (data quality)
+    # charts row 4: selection stage breakdown (process monitor) + data health summary (data quality)
     col_l3, col_r3 = card_grid(2)
 
     with col_l3:
