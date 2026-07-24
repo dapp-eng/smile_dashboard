@@ -3,6 +3,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 from utils.layout import (
     inject_global_css, page_header, metric_strip,
@@ -142,18 +143,15 @@ with col_l:
         if filtered.empty:
             st.info(t("mc.no_data_filter"))
         else:
-            industry_agg = filtered["industri_sektor"].value_counts().head(12).reset_index()
+            industry_agg = filtered["industri_sektor"].value_counts().reset_index()
             industry_agg.columns = ["industry", "count"]
-            fig = px.bar(
-                industry_agg, x="count", y="industry", orientation="h",
-                color_discrete_sequence=[CHART_PALETTE[0]], text="count",
+            fig = px.treemap(
+                industry_agg, path=["industry"], values="count",
+                color="industry", color_discrete_sequence=CHART_PALETTE
             )
-            fig.update_traces(textposition="outside")
             apply_plotly_style(fig)
-            fig.update_layout(
-                yaxis=dict(categoryorder="total ascending", title=""),
-                xaxis_title=t("mc.number_requests"), height=400,
-            )
+            fig.update_layout(height=400, margin=dict(t=30, l=10, r=10, b=30))
+            fig.update_traces(textinfo="label+value", textfont_size=12)
             st.plotly_chart(fig, use_container_width=True)
 
 with col_r:
@@ -245,18 +243,46 @@ with col_l3:
                 .groupby("nama_perusahaan")
                 .agg(requests=("jumlah_permintaan", "sum"), sent=("jumlah_dikirimkan", "sum"))
                 .reset_index()
-                .nlargest(15, "requests")
+                .nlargest(10, "requests")
             )
             fig = px.bar(
                 company_vol, x="requests", y="nama_perusahaan", orientation="h",
-                color_discrete_sequence=[CHART_PALETTE[0]], text="requests",
+                color_discrete_sequence=[CHART_PALETTE[0]], text="nama_perusahaan",
             )
-            fig.update_traces(textposition="outside")
+            fig.update_traces(
+                textposition='outside',
+                constraintext='none',
+                cliponaxis=False
+            )
+            
+            annotations = []
+            for _, row in company_vol.iterrows():
+                if row["requests"] > 0:
+                    annotations.append(dict(
+                        x=row["requests"],
+                        y=row["nama_perusahaan"],
+                        text=str(row["requests"]),
+                        xanchor='right',
+                        xshift=-5,
+                        yanchor='middle',
+                        showarrow=False,
+                        font=dict(color="white", size=10)
+                    ))
+
             apply_plotly_style(fig)
             fig.update_layout(
-                yaxis=dict(categoryorder="total ascending", title=""),
+                yaxis=dict(
+                    categoryorder="total ascending", 
+                    title=dict(text=t("mc.company"), standoff=20),
+                    showticklabels=False,
+                    automargin=False
+                ),
                 xaxis_title=t("mc.total_headcount_req"), height=400,
+                annotations=annotations,
+                margin=dict(l=30)
             )
+            max_val = company_vol["requests"].max() if not company_vol.empty else 1
+            fig.update_xaxes(range=[0, max_val * 1.6])
             st.plotly_chart(fig, use_container_width=True)
 
 with col_r3:
@@ -288,91 +314,131 @@ section_divider()
 # Prepare df_track for student metrics
 df_track = df_ts.copy()
 
-with chart_panel(t("mc.top10_placement"), height=420, subtitle=t("mc.top10_placement_sub")):
-    company_totals = df_track.groupby("company").size().reset_index(name="Total")
-    placed_candidates = df_track[df_track["progress_student"] == "Placement"]
-    
-    if not placed_candidates.empty:
-        place_by_company = placed_candidates.groupby("company").size().reset_index(name="Placement Count")
-        place_by_company = place_by_company.merge(company_totals, on="company")
-        place_by_company["Placement Rate (%)"] = (place_by_company["Placement Count"] / place_by_company["Total"] * 100).round(1)
+col_place, col_rej = st.columns(2, gap="medium")
 
-        place_by_company["custom_label"] = place_by_company.apply(
-            lambda row: f"<b>{int(row['Placement Count'])}</b>/{int(row['Total'])} ({row['Placement Rate (%)']}%)", axis=1
-        )
+with col_place:
+    with chart_panel(t("mc.top10_placement"), height=460, subtitle=t("mc.top10_placement_sub")):
+        company_totals = df_track.groupby("company").size().reset_index(name="Total")
+        placed_candidates = df_track[df_track["progress_student"] == "Placement"]
+        
+        if not placed_candidates.empty:
+            place_by_company = placed_candidates.groupby("company").size().reset_index(name="Placement Count")
+            place_by_company = place_by_company.merge(company_totals, on="company")
+            place_by_company["Placement Rate (%)"] = (place_by_company["Placement Count"] / place_by_company["Total"] * 100).round(1)
 
-        place_by_company["Rank_Vol"] = place_by_company["Placement Count"].rank(method="min", ascending=False)
-        place_by_company["Rank_Rate"] = place_by_company["Placement Rate (%)"].rank(method="min", ascending=False)
-        place_by_company["Composite_Score"] = place_by_company["Rank_Vol"] + place_by_company["Rank_Rate"]
+            place_by_company["custom_label"] = place_by_company.apply(
+                lambda row: f"<b>{int(row['Placement Count'])}</b>/{int(row['Total'])} ({row['Placement Rate (%)']}%)", axis=1
+            )
 
-        c_min = place_by_company["Composite_Score"].min()
-        c_max = place_by_company["Composite_Score"].max()
-        if c_max > c_min:
-            place_by_company["Impact Score"] = 100 * (1 - (place_by_company["Composite_Score"] - c_min) / (c_max - c_min))
+            place_by_company["Rank_Vol"] = place_by_company["Placement Count"].rank(method="min", ascending=False)
+            place_by_company["Rank_Rate"] = place_by_company["Placement Rate (%)"].rank(method="min", ascending=False)
+            place_by_company["Composite_Score"] = place_by_company["Rank_Vol"] + place_by_company["Rank_Rate"]
+
+            c_min = place_by_company["Composite_Score"].min()
+            c_max = place_by_company["Composite_Score"].max()
+            if c_max > c_min:
+                place_by_company["Impact Score"] = 100 * (1 - (place_by_company["Composite_Score"] - c_min) / (c_max - c_min))
+            else:
+                place_by_company["Impact Score"] = 100.0
+
+            top_10_place = place_by_company.sort_values(["Composite_Score", "Placement Count"], ascending=[True, False]).head(10)
+            top_10_place = top_10_place.sort_values(["Composite_Score", "Placement Count"], ascending=[False, True])
+
+            fig_place = px.bar(
+                top_10_place, x="Impact Score", y="company", orientation="h",
+                color="Impact Score", color_continuous_scale=["#37A2B9", "#3462ED"]
+            )
+            
+            annotations = []
+            for _, row in top_10_place.iterrows():
+                label_text = f"<b>{row['company']}</b>: {int(row['Placement Count'])}/{int(row['Total'])} ({row['Placement Rate (%)']}%)"
+                annotations.append(dict(
+                    x=81, 
+                    y=row["company"],
+                    text=label_text,
+                    xanchor="left",
+                    yanchor="middle",
+                    showarrow=False,
+                    font=dict(color="white", size=11)
+                ))
+
+            apply_plotly_style(fig_place)
+            fig_place.update_layout(
+                height=380, margin=dict(t=10, l=30, r=10, b=10),
+                xaxis_title=t("mp.impact_score_axis"), 
+                yaxis=dict(
+                    title=dict(text=t("mc.company"), standoff=20),
+                    showticklabels=False
+                ),
+                annotations=annotations,
+                coloraxis_showscale=False
+            )
+            fig_place.update_xaxes(range=[80, 100])
+
+            st.plotly_chart(fig_place, use_container_width=True)
         else:
-            place_by_company["Impact Score"] = 100.0
+            st.info("No placement data available.")
 
-        top_10_place = place_by_company.sort_values(["Composite_Score", "Placement Count"], ascending=[True, False]).head(10)
-        top_10_place = top_10_place.sort_values(["Composite_Score", "Placement Count"], ascending=[False, True])
+with col_rej:
+    with chart_panel(t("mc.top10_rejection"), height=460, subtitle=t("mc.top10_rejection_sub")):
+        rejected_candidates = df_track[df_track["progress_student"] == "Rejected"]
+        if not rejected_candidates.empty:
+            rej_by_company = rejected_candidates.groupby("company").size().reset_index(name="Rejection Count")
+            rej_by_company = rej_by_company.merge(company_totals, on="company")
+            rej_by_company["Rejection Rate (%)"] = (rej_by_company["Rejection Count"] / rej_by_company["Total"] * 100).round(1)
 
-        fig_place = px.bar(
-            top_10_place, x="Impact Score", y="company", orientation="h",
-            color_discrete_sequence=[COLORS["success"]],
-            text="custom_label"
-        )
-        apply_plotly_style(fig_place)
-        fig_place.update_layout(
-            height=340, margin=dict(t=10, l=10, r=20, b=10),
-            xaxis_title=t("mp.impact_score_axis"), yaxis_title=""
-        )
-        fig_place.update_traces(textposition="outside", cliponaxis=False)
-        fig_place.update_xaxes(range=[0, 115])
+            rej_by_company["custom_label"] = rej_by_company.apply(
+                lambda row: f"<b>{int(row['Rejection Count'])}</b>/{int(row['Total'])} ({row['Rejection Rate (%)']}%)", axis=1
+            )
 
-        st.plotly_chart(fig_place, use_container_width=True)
-    else:
-        st.info("No placement data available.")
+            rej_by_company["Rank_Vol"] = rej_by_company["Rejection Count"].rank(method="min", ascending=False)
+            rej_by_company["Rank_Rate"] = rej_by_company["Rejection Rate (%)"].rank(method="min", ascending=False)
+            rej_by_company["Composite_Score"] = rej_by_company["Rank_Vol"] + rej_by_company["Rank_Rate"]
 
-with chart_panel(t("mc.top10_rejection"), height=420, subtitle=t("mc.top10_rejection_sub")):
-    rejected_candidates = df_track[df_track["progress_student"] == "Rejected"]
-    if not rejected_candidates.empty:
-        rej_by_company = rejected_candidates.groupby("company").size().reset_index(name="Rejection Count")
-        rej_by_company = rej_by_company.merge(company_totals, on="company")
-        rej_by_company["Rejection Rate (%)"] = (rej_by_company["Rejection Count"] / rej_by_company["Total"] * 100).round(1)
+            c_min = rej_by_company["Composite_Score"].min()
+            c_max = rej_by_company["Composite_Score"].max()
+            if c_max > c_min:
+                rej_by_company["Impact Score"] = 100 * (1 - (rej_by_company["Composite_Score"] - c_min) / (c_max - c_min))
+            else:
+                rej_by_company["Impact Score"] = 100.0
 
-        rej_by_company["custom_label"] = rej_by_company.apply(
-            lambda row: f"<b>{int(row['Rejection Count'])}</b>/{int(row['Total'])} ({row['Rejection Rate (%)']}%)", axis=1
-        )
+            top_10_rej = rej_by_company.sort_values(["Composite_Score", "Rejection Count"], ascending=[True, False]).head(10)
+            top_10_rej = top_10_rej.sort_values(["Composite_Score", "Rejection Count"], ascending=[False, True])
 
-        rej_by_company["Rank_Vol"] = rej_by_company["Rejection Count"].rank(method="min", ascending=False)
-        rej_by_company["Rank_Rate"] = rej_by_company["Rejection Rate (%)"].rank(method="min", ascending=False)
-        rej_by_company["Composite_Score"] = rej_by_company["Rank_Vol"] + rej_by_company["Rank_Rate"]
+            fig_rej = px.bar(
+                top_10_rej, x="Impact Score", y="company", orientation="h",
+                color="Impact Score", color_continuous_scale=["#37A2B9", "#3462ED"]
+            )
+            
+            annotations = []
+            for _, row in top_10_rej.iterrows():
+                label_text = f"<b>{row['company']}</b>: {int(row['Rejection Count'])}/{int(row['Total'])} ({row['Rejection Rate (%)']}%)"
+                annotations.append(dict(
+                    x=81, 
+                    y=row["company"],
+                    text=label_text,
+                    xanchor="left",
+                    yanchor="middle",
+                    showarrow=False,
+                    font=dict(color="white", size=11)
+                ))
 
-        c_min = rej_by_company["Composite_Score"].min()
-        c_max = rej_by_company["Composite_Score"].max()
-        if c_max > c_min:
-            rej_by_company["Impact Score"] = 100 * (1 - (rej_by_company["Composite_Score"] - c_min) / (c_max - c_min))
+            apply_plotly_style(fig_rej)
+            fig_rej.update_layout(
+                height=380, margin=dict(t=10, l=30, r=10, b=10),
+                xaxis_title=t("mp.impact_score_axis"), 
+                yaxis=dict(
+                    title=dict(text=t("mc.company"), standoff=20),
+                    showticklabels=False
+                ),
+                annotations=annotations,
+                coloraxis_showscale=False
+            )
+            fig_rej.update_xaxes(range=[80, 100])
+
+            st.plotly_chart(fig_rej, use_container_width=True)
         else:
-            rej_by_company["Impact Score"] = 100.0
-
-        top_10_rej = rej_by_company.sort_values(["Composite_Score", "Rejection Count"], ascending=[True, False]).head(10)
-        top_10_rej = top_10_rej.sort_values(["Composite_Score", "Rejection Count"], ascending=[False, True])
-
-        fig_rej = px.bar(
-            top_10_rej, x="Impact Score", y="company", orientation="h",
-            color_discrete_sequence=[COLORS["danger"]],
-            text="custom_label"
-        )
-        apply_plotly_style(fig_rej)
-        fig_rej.update_layout(
-            height=340, margin=dict(t=10, l=10, r=20, b=10),
-            xaxis_title=t("mp.impact_score_axis"), yaxis_title=""
-        )
-        fig_rej.update_traces(textposition="outside", cliponaxis=False)
-        fig_rej.update_xaxes(range=[0, 115])
-
-        st.plotly_chart(fig_rej, use_container_width=True)
-    else:
-        st.info("No rejection data available.")
+            st.info("No rejection data available.")
 
 # detail table
 section_divider()

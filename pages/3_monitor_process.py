@@ -430,7 +430,7 @@ with r2:
 st.caption(t("mp.stage_codes_caption_short"))
 
 
-
+section_divider()
 # -------------------------------------------------------------
 # Row 4: Ghosting Metrics
 # -------------------------------------------------------------

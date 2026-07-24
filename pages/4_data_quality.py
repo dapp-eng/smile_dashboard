@@ -32,6 +32,12 @@ if df_master.empty:
 df_master["semester_status"] = df_master["semester_status"].fillna("Unknown").astype(str)
 df_master["program_studi_status"] = df_master["program_studi_status"].fillna("Unknown").astype(str)
 
+st.markdown(f'''
+    <h3 style='margin-bottom: 0.2rem;'>{t("ds.section1_title")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("ds.section1_sub")}</p>
+    <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
+''', unsafe_allow_html=True)
+
 # filters
 with filter_bar():
     fc1, fc2, fc3 = st.columns([1, 1, 2])
@@ -111,7 +117,7 @@ section_divider()
 col_hist, col_pie = st.columns([3, 2], gap="medium")
 
 with col_hist:
-    with chart_panel(t("ds.chart_days_sync"), height=380):
+    with chart_panel(t("ds.chart_days_sync"), subtitle=t("ds.chart_days_sync_sub"), height=380):
         fig_hist = px.histogram(
             df_master, x="days_since_sync", color="staleness",
             color_discrete_map=STALENESS_COLORS, height=300,
@@ -131,7 +137,7 @@ with col_hist:
         st.plotly_chart(fig_hist, use_container_width=True)
 
 with col_pie:
-    with chart_panel(t("ds.chart_staleness"), height=380):
+    with chart_panel(t("ds.chart_staleness"), subtitle=t("ds.chart_staleness_sub"), height=380):
         df_pie = df_master["staleness"].value_counts().reset_index()
         df_pie.columns = ["staleness", "count"]
         fig_pie = px.pie(
@@ -152,7 +158,7 @@ with col_pie:
 st.caption(t("ds.staleness_note"))
 
 # monthly sync volume
-with chart_panel(t("ds.chart_monthly_sync"), height=380):
+with chart_panel(t("ds.chart_monthly_sync"), subtitle=t("ds.chart_monthly_sync_sub"), height=380):
     df_sync_time = df_master.copy()
     df_sync_time["sync_month"] = df_sync_time["sync_date"].dt.to_period("M").astype(str)
     monthly_counts = df_sync_time.groupby("sync_month").size().reset_index(name="syncs")
@@ -173,7 +179,7 @@ with chart_panel(t("ds.chart_monthly_sync"), height=380):
 col_sem, col_prog = st.columns([2, 3], gap="medium")
 
 with col_sem:
-    with chart_panel(t("ds.chart_sem_staleness"), height=420):
+    with chart_panel(t("ds.chart_sem_staleness"), subtitle=t("ds.chart_sem_staleness_sub"), height=420):
         sorted_sems = sorted(
             df_master["semester_status"].unique(),
             key=lambda x: int(float(x)) if x.replace(".", "", 1).isdigit() else 999,
@@ -194,7 +200,7 @@ with col_sem:
         st.plotly_chart(fig_sem, use_container_width=True)
 
 with col_prog:
-    with chart_panel(t("ds.chart_prodi_staleness"), height=420):
+    with chart_panel(t("ds.chart_prodi_staleness"), subtitle=t("ds.chart_prodi_staleness_sub"), height=420):
         prog_order = df_master["program_studi_status"].value_counts().index.tolist()
         prog_counts = df_master.groupby(["program_studi_status", "staleness"]).size().reset_index(name="count")
         fig_prog = px.bar(
@@ -214,7 +220,7 @@ with col_prog:
 section_divider()
 
 # master quality data table
-with table_panel(t("ds.master_table"), height=500):
+with table_panel(t("ds.master_table"), subtitle=t("ds.master_table_sub"), height=500):
     with filter_bar():
         f1, f2 = st.columns([1, 1], vertical_alignment="bottom")
         with f1:
@@ -250,11 +256,9 @@ df_tracking = load_csv_table("tracking_student")
 df_finish = df_tracking[df_tracking["_original_progress"] == "Finish"].copy()
 
 if not df_finish.empty:
-    st.markdown('''
-        <h3 style='margin-bottom: 0.2rem;'>"Finish" Status Reclassification</h3>
-        <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>
-            The raw data used "Finish" as a catch-all close-out status. We reclassify these records using the <code>rejection</code> column to reveal the true outcome.
-        </p>
+    st.markdown(f'''
+        <h3 style='margin-bottom: 0.2rem;'>{t("ds.section2_title")}</h3>
+        <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("ds.section2_sub")}</p>
         <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
     ''', unsafe_allow_html=True)
 
@@ -274,7 +278,7 @@ if not df_finish.empty:
     dq1, dq2 = st.columns([1, 1], gap="medium")
 
     with dq1:
-        with chart_panel("Original Rejection Values", height=420, subtitle="What the rejection column actually said for 'Finish' records"):
+        with chart_panel(t("ds.chart_orig_rej"), subtitle=t("ds.chart_orig_rej_sub"), height=420):
             rej_counts = df_finish["rejection"].value_counts().reset_index()
             rej_counts.columns = ["rejection", "count"]
 
@@ -302,7 +306,7 @@ if not df_finish.empty:
             st.plotly_chart(fig_donut, use_container_width=True)
 
     with dq2:
-        with chart_panel("Reclassification Flow", height=420, subtitle="How 'Finish' records were remapped to their true outcomes"):
+        with chart_panel(t("ds.chart_reclass"), subtitle=t("ds.chart_reclass_sub"), height=420):
             reclass_map = {
                 "Placement": "Placement",
                 "Ghosting": "Ghosting",
