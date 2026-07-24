@@ -101,4 +101,5 @@ def get_company_monitoring_data():
         "tracking_company": load_csv_table("tracking_company"),
         "talent_request": load_csv_table("talent_request"),
         "tracking_student": load_csv_table("tracking_student"),
+        "student_all": load_csv_table("student_all"),
     }

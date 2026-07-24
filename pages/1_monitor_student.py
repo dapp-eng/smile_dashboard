@@ -12,7 +12,7 @@ from utils.theme import COLORS, apply_plotly_style, CHART_PALETTE
 from utils.i18n import t
 from utils import queries, metrics
 
-ELIGIBILITY_COLORS = {"Eligible": COLORS["success"], "Ineligible": COLORS["danger"]}
+ELIGIBILITY_COLORS = {"Eligible": "#3462ED", "Ineligible": "#37A2B9"}
 
 inject_global_css()
 
@@ -64,6 +64,43 @@ with c_prof_1:
             st.plotly_chart(fig_interest, use_container_width=True)
 
 with c_prof_2:
+    with chart_panel(t("ms.chart_placement_pref"), subtitle=t("ms.chart_placement_pref_sub"), height=420):
+        if df_prof.empty:
+            st.info("No data")
+        else:
+            pref_counts = df_prof["jenis_penempatan_diminati"].value_counts().reset_index()
+            pref_counts.columns = ["Preference", "Count"]
+            fig_pref = px.pie(
+                pref_counts, names="Preference", values="Count", hole=0.5,
+                color_discrete_sequence=px.colors.sequential.Blues_r
+            )
+            fig_pref.update_traces(textposition="outside", textinfo="label+percent", pull=[0.02]*len(pref_counts))
+            apply_plotly_style(fig_pref)
+            fig_pref.update_layout(height=360, showlegend=True, margin=dict(t=30, b=30))
+            st.plotly_chart(fig_pref, use_container_width=True)
+
+st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
+
+# Row 2: Study Program Distribution (Bar) | Popular Tools (Bar)
+c_prof_3, c_prof_4 = card_grid(2)
+with c_prof_3:
+    with chart_panel(t("ms.chart_prodi_dist"), subtitle=t("ms.chart_prodi_dist_sub"), height=420):
+        if df_prof.empty:
+            st.info("No data")
+        else:
+            prodi_counts = df_prof["program_studi"].value_counts().head(10).reset_index()
+            prodi_counts.columns = ["Prodi", "Count"]
+            prodi_counts = prodi_counts.sort_values("Count", ascending=True)
+            fig_prodi = px.bar(
+                prodi_counts, x="Count", y="Prodi", orientation="h",
+                text="Count", color="Count", color_continuous_scale="Blues"
+            )
+            apply_plotly_style(fig_prodi)
+            fig_prodi.update_layout(height=360, margin=dict(t=10, l=10, r=20, b=0), xaxis_title="", yaxis_title="")
+            fig_prodi.update_traces(textposition="outside", cliponaxis=False)
+            st.plotly_chart(fig_prodi, use_container_width=True)
+
+with c_prof_4:
     with chart_panel(t("ms.chart_tools"), subtitle=t("ms.chart_tools_sub"), height=420):
         if df_prof.empty:
             st.info("No data")
@@ -84,43 +121,6 @@ with c_prof_2:
             fig_tools.update_layout(height=360, margin=dict(t=10, l=10, r=20, b=0), xaxis_title="", yaxis_title="")
             fig_tools.update_traces(textposition="outside", cliponaxis=False)
             st.plotly_chart(fig_tools, use_container_width=True)
-
-st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
-
-# Row 2: Top Domiciles (Bar) | Semester Distribution (Column)
-c_prof_3, c_prof_4 = card_grid(2)
-with c_prof_3:
-    with chart_panel(t("ms.chart_domicile"), subtitle=t("ms.chart_domicile_sub"), height=420):
-        if df_prof.empty:
-            st.info("No data")
-        else:
-            dom_counts = df_prof["domisili"].value_counts().head(10).reset_index()
-            dom_counts.columns = ["Domicile", "Count"]
-            dom_counts = dom_counts.sort_values("Count", ascending=True)
-            fig_dom = px.bar(
-                dom_counts, x="Count", y="Domicile", orientation="h",
-                text="Count", color_discrete_sequence=[COLORS["primary"]]
-            )
-            apply_plotly_style(fig_dom)
-            fig_dom.update_layout(height=360, margin=dict(t=10, l=10, r=20, b=0), xaxis_title="", yaxis_title="")
-            fig_dom.update_traces(textposition="outside", cliponaxis=False)
-            st.plotly_chart(fig_dom, use_container_width=True)
-
-with c_prof_4:
-    with chart_panel(t("ms.chart_placement_pref"), subtitle=t("ms.chart_placement_pref_sub"), height=420):
-        if df_prof.empty:
-            st.info("No data")
-        else:
-            pref_counts = df_prof["jenis_penempatan_diminati"].value_counts().reset_index()
-            pref_counts.columns = ["Preference", "Count"]
-            fig_pref = px.pie(
-                pref_counts, names="Preference", values="Count", hole=0.5,
-                color_discrete_sequence=px.colors.sequential.Blues_r
-            )
-            fig_pref.update_traces(textposition="outside", textinfo="label+percent", pull=[0.02]*len(pref_counts))
-            apply_plotly_style(fig_pref)
-            fig_pref.update_layout(height=360, showlegend=True, margin=dict(t=30, b=30))
-            st.plotly_chart(fig_pref, use_container_width=True)
 
 section_divider()
 
@@ -191,7 +191,7 @@ metric_strip([
 ])
 
 section_divider()
-left, right = card_grid(2)
+left, right = st.columns([3, 2], gap="large")
 
 with left:
     with chart_panel(t("ms.chart_elig_prodi"), height=430, subtitle=t("ms.chart_elig_prodi_sub")):

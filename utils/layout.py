@@ -733,7 +733,7 @@ def page_header(title: str, caption: str = "", bt_caption: str = "", *, page_tit
     # render page title and single concise description text starting with BT code
     inject_global_css()
     st.markdown(
-        f'<div class="smile-page-header"><h1>{title}</h1></div>',
+        f'<div class="smile-page-header"><h1>{title.upper()}</h1></div>',
         unsafe_allow_html=True,
     )
     desc = bt_caption or caption

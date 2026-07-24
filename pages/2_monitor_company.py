@@ -134,11 +134,20 @@ metric_strip([
     {"label": t("mc.avg_response"), "value": f"{avg_resp_days} {t('mc.days')}"},
 ])
 
-# charts row 1
+# -------------------------------------------------------------------------
+# ROW 1: Demographics Overview (Industry Sector & Company Type)
+# -------------------------------------------------------------------------
 section_divider()
-col_l, col_r = card_grid(2)
 
-with col_l:
+st.markdown(f'''
+    <h3 style='margin-bottom: 0.2rem;'>{t("mc.demographics_volume_title")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("mc.demographics_volume_sub")}</p>
+    <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
+''', unsafe_allow_html=True)
+
+col_r1_left, col_r1_right = st.columns([3, 2])
+
+with col_r1_left:
     with chart_panel(t("mc.chart_industry"), height=460, subtitle=t("mc.chart_industry_sub")):
         if filtered.empty:
             st.info(t("mc.no_data_filter"))
@@ -154,86 +163,49 @@ with col_l:
             fig.update_traces(textinfo="label+value", textfont_size=12)
             st.plotly_chart(fig, use_container_width=True)
 
-with col_r:
-    with chart_panel(t("mc.chart_type_dist"), height=460, subtitle=t("mc.chart_type_dist_sub")):
+with col_r1_right:
+    with chart_panel(t("mc.chart_company_type"), height=460, subtitle=t("mc.chart_company_type_sub")):
         if filtered.empty:
             st.info(t("mc.no_data_filter"))
         else:
-            jenis_agg = filtered["jenis_penempatan"].value_counts().reset_index()
-            jenis_agg.columns = ["type", "count"]
+            ctype_agg = filtered["company_type"].value_counts().reset_index()
+            ctype_agg.columns = ["type", "count"]
+            fig = px.treemap(
+                ctype_agg, path=["type"], values="count",
+                color="type", color_discrete_sequence=CHART_PALETTE[::-1]
+            )
+            apply_plotly_style(fig)
+            fig.update_layout(height=400, margin=dict(t=30, l=10, r=10, b=30))
+            fig.update_traces(textinfo="label+value", textfont_size=12)
+            st.plotly_chart(fig, use_container_width=True)
+
+
+# -------------------------------------------------------------------------
+# ROW 2: Volume Leaderboard & Scale
+# -------------------------------------------------------------------------
+
+col_r2_left, col_r2_right = st.columns([2, 3])
+
+with col_r2_left:
+    with chart_panel(t("mc.chart_company_scale"), height=460, subtitle=t("mc.chart_company_scale_sub")):
+        if filtered.empty:
+            st.info(t("mc.no_data_filter"))
+        else:
+            scale_agg = filtered["skala_perusahaan"].value_counts().reset_index()
+            scale_agg.columns = ["scale", "count"]
             fig = px.pie(
-                jenis_agg, names="type", values="count", hole=0.5,
-                color="type", color_discrete_map=JENIS_PENEMPATAN_COLORS,
+                scale_agg, names="scale", values="count", hole=0.5,
+                color_discrete_sequence=CHART_PALETTE[3:],
             )
             fig.update_traces(
                 textinfo="label+percent", textposition="outside",
-                pull=[0.02] * len(jenis_agg),
+                pull=[0.02] * len(scale_agg),
             )
             apply_plotly_style(fig)
-            fig.update_layout(height=400, showlegend=True)
+            fig.update_layout(height=400, showlegend=False, margin=dict(t=30, b=30, l=10, r=10))
             st.plotly_chart(fig, use_container_width=True)
 
-# charts row 2
-section_divider()
-col_l2, col_r2 = card_grid(2)
-
-with col_l2:
-    with chart_panel(t("mc.chart_monthly"), height=460, subtitle=t("mc.chart_monthly_sub")):
-        if filtered.empty:
-            st.info(t("mc.no_data_filter"))
-        else:
-            monthly_data = filtered.dropna(subset=["request_date"]).copy()
-            monthly = (
-                monthly_data
-                .groupby(monthly_data["request_date"].dt.to_period("M"))
-                .size().reset_index(name="count")
-            )
-            monthly["request_date"] = monthly["request_date"].astype(str)
-            fig = px.area(
-                monthly, x="request_date", y="count",
-                color_discrete_sequence=[CHART_PALETTE[0]], markers=True,
-            )
-            apply_plotly_style(fig)
-            fig.update_layout(
-                xaxis_title=t("mc.month"), yaxis_title=t("mc.request_count"), height=400,
-            )
-            fig.update_traces(line=dict(width=2.5), fillcolor="rgba(52,98,237,0.08)")
-            st.plotly_chart(fig, use_container_width=True)
-
-with col_r2:
-    with chart_panel(t("mc.chart_pipeline"), height=460, subtitle=t("mc.chart_pipeline_sub")):
-        if filtered.empty:
-            st.info(t("mc.no_data_filter"))
-        else:
-            pipeline_order = ["Draft", "Submitted", "On Review", "Shortlisted", "Closed"]
-            progress_agg = (
-                filtered["progress"]
-                .value_counts()
-                .reindex(pipeline_order, fill_value=0)
-                .reset_index()
-            )
-            progress_agg.columns = ["stage", "count"]
-            fig = px.bar(
-                progress_agg, x="count", y="stage", orientation="h",
-                color="stage", color_discrete_map=PIPELINE_COLORS, text="count",
-            )
-            fig.update_traces(textposition="outside", showlegend=False)
-            apply_plotly_style(fig)
-            fig.update_layout(
-                yaxis=dict(
-                    categoryorder="array",
-                    categoryarray=list(reversed(pipeline_order)),
-                    title="",
-                ),
-                xaxis_title=t("mc.count"), height=400,
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-# charts row 3
-section_divider()
-col_l3, col_r3 = card_grid(2)
-
-with col_l3:
+with col_r2_right:
     with chart_panel(t("mc.chart_top_companies"), height=460, subtitle=t("mc.chart_top_companies_sub")):
         if filtered.empty:
             st.info(t("mc.no_data_filter"))
@@ -285,7 +257,133 @@ with col_l3:
             fig.update_xaxes(range=[0, max_val * 1.6])
             st.plotly_chart(fig, use_container_width=True)
 
-with col_r3:
+
+# -------------------------------------------------------------------------
+# ROW 3: Trend Analysis (Monthly Distribution)
+# -------------------------------------------------------------------------
+section_divider()
+
+st.markdown(f'''
+    <h3 style='margin-bottom: 0.2rem;'>{t("mc.trend_ops_title")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("mc.trend_ops_sub")}</p>
+    <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
+''', unsafe_allow_html=True)
+
+with chart_panel(t("mc.chart_monthly"), height=460, subtitle=t("mc.chart_monthly_sub")):
+    if filtered.empty:
+        st.info(t("mc.no_data_filter"))
+    else:
+        monthly_data = filtered.dropna(subset=["request_date"]).copy()
+        monthly = (
+            monthly_data
+            .groupby(monthly_data["request_date"].dt.to_period("M"))
+            .size().reset_index(name="count")
+        )
+        monthly["request_date"] = monthly["request_date"].astype(str)
+        fig = px.area(
+            monthly, x="request_date", y="count",
+            color_discrete_sequence=[CHART_PALETTE[0]], markers=True,
+        )
+        apply_plotly_style(fig)
+        fig.update_layout(
+            xaxis_title=t("mc.month"), yaxis_title=t("mc.request_count"), height=400,
+        )
+        fig.update_traces(line=dict(width=2.5), fillcolor="rgba(52,98,237,0.08)")
+        st.plotly_chart(fig, use_container_width=True)
+
+
+# -------------------------------------------------------------------------
+# ROW 4: Operations Overview (Pipeline & Sumber Form)
+# -------------------------------------------------------------------------
+
+col_r4_left, col_r4_right = st.columns(2)
+
+with col_r4_left:
+    with chart_panel(t("mc.chart_sumber_form"), height=460, subtitle=t("mc.chart_sumber_form_sub")):
+        if filtered.empty:
+            st.info(t("mc.no_data_filter"))
+        else:
+            if "sumber_baris_form" not in filtered.columns:
+                sumber_map = dict(zip(df_tr["id_talent_req"], df_tr["sumber_baris_form"]))
+                filtered["sumber_baris_form"] = filtered["id_talent_req"].map(sumber_map).fillna("Unknown")
+
+            sumber_agg = filtered["sumber_baris_form"].value_counts().reset_index()
+            sumber_agg.columns = ["source", "count"]
+            fig = px.pie(
+                sumber_agg, names="source", values="count", hole=0.5,
+                color_discrete_sequence=CHART_PALETTE,
+            )
+            fig.update_traces(
+                textinfo="label+percent", textposition="outside",
+                pull=[0.02] * len(sumber_agg),
+            )
+            apply_plotly_style(fig)
+            fig.update_layout(height=400, showlegend=False, margin=dict(t=30, b=30, l=10, r=10))
+            st.plotly_chart(fig, use_container_width=True)
+
+with col_r4_right:
+    with chart_panel(t("mc.chart_pipeline"), height=460, subtitle=t("mc.chart_pipeline_sub")):
+        if filtered.empty:
+            st.info(t("mc.no_data_filter"))
+        else:
+            pipeline_order = ["Draft", "Submitted", "On Review", "Shortlisted", "Closed"]
+            progress_agg = (
+                filtered["progress"]
+                .value_counts()
+                .reindex(pipeline_order, fill_value=0)
+                .reset_index()
+            )
+            progress_agg.columns = ["stage", "count"]
+            fig = px.bar(
+                progress_agg, x="count", y="stage", orientation="h",
+                color="stage", color_discrete_map=PIPELINE_COLORS, text="count",
+            )
+            fig.update_traces(textposition="outside", showlegend=False)
+            apply_plotly_style(fig)
+            fig.update_layout(
+                yaxis=dict(
+                    categoryorder="array",
+                    categoryarray=list(reversed(pipeline_order)),
+                    title="",
+                ),
+                xaxis_title=t("mc.count"), height=400,
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+
+# -------------------------------------------------------------------------
+# ROW 5: Structural Breakdown (Placement, Working Arr, Durasi)
+# -------------------------------------------------------------------------
+section_divider()
+
+st.markdown(f'''
+    <h3 style='margin-bottom: 0.2rem;'>{t("mc.characteristics_title")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("mc.characteristics_sub")}</p>
+    <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
+''', unsafe_allow_html=True)
+
+col_r5_1, col_r5_2, col_r5_3 = st.columns(3)
+
+with col_r5_1:
+    with chart_panel(t("mc.chart_type_dist"), height=460, subtitle=t("mc.chart_type_dist_sub")):
+        if filtered.empty:
+            st.info(t("mc.no_data_filter"))
+        else:
+            jenis_agg = filtered["jenis_penempatan"].value_counts().reset_index()
+            jenis_agg.columns = ["type", "count"]
+            fig = px.pie(
+                jenis_agg, names="type", values="count", hole=0.5,
+                color="type", color_discrete_map=JENIS_PENEMPATAN_COLORS,
+            )
+            fig.update_traces(
+                textinfo="label+percent", textposition="outside",
+                pull=[0.02] * len(jenis_agg),
+            )
+            apply_plotly_style(fig)
+            fig.update_layout(height=400, showlegend=False, margin=dict(t=30, b=30, l=10, r=10))
+            st.plotly_chart(fig, use_container_width=True)
+
+with col_r5_2:
     with chart_panel(t("mc.chart_working_arr"), height=460, subtitle=t("mc.chart_working_arr_sub")):
         if filtered.empty:
             st.info(t("mc.no_data_filter"))
@@ -306,10 +404,265 @@ with col_r3:
                 pull=[0.02] * len(wa_agg),
             )
             apply_plotly_style(fig)
-            fig.update_layout(height=400, showlegend=True)
+            fig.update_layout(height=400, showlegend=False, margin=dict(t=30, b=30, l=10, r=10))
             st.plotly_chart(fig, use_container_width=True)
-# charts row 4: Top 10 Placements and Rejections
+
+with col_r5_3:
+    with chart_panel(t("mc.chart_duration"), height=460, subtitle=t("mc.chart_duration_sub")):
+        if filtered.empty:
+            st.info(t("mc.no_data_filter"))
+        else:
+            if "durasi" not in filtered.columns:
+                dur_map = dict(zip(df_tr["id_talent_req"], df_tr["durasi"]))
+                filtered["durasi"] = filtered["id_talent_req"].map(dur_map).fillna("Unknown")
+
+            durasi_agg = filtered["durasi"].value_counts().reset_index()
+            durasi_agg.columns = ["durasi", "count"]
+            
+            fig = px.pie(
+                durasi_agg, names="durasi", values="count", hole=0.5,
+                color_discrete_sequence=CHART_PALETTE,
+            )
+            fig.update_traces(
+                textinfo="label+percent", textposition="outside",
+                pull=[0.02] * len(durasi_agg),
+            )
+            apply_plotly_style(fig)
+            fig.update_layout(height=400, showlegend=False, margin=dict(t=30, b=30, l=10, r=10))
+            st.plotly_chart(fig, use_container_width=True)
+
+
+# -------------------------------------------------------------------------
+# ROW 6: Demand Characteristics (Fields & Tools)
+# -------------------------------------------------------------------------
+
+col_r6_left, col_r6_right = st.columns(2)
+
+with col_r6_left:
+    with chart_panel(t("mc.chart_prodi_demand"), height=460, subtitle=t("mc.chart_prodi_demand_sub")):
+        if filtered.empty:
+            st.info(t("mc.no_data_filter"))
+        else:
+            if "bidang_studi_dibutuhkan" not in filtered.columns:
+                prodi_map = dict(zip(df_tr["id_talent_req"], df_tr["bidang_studi_dibutuhkan"]))
+                filtered["bidang_studi_dibutuhkan"] = filtered["id_talent_req"].map(prodi_map).fillna("")
+
+            all_prodi = []
+            for val in filtered["bidang_studi_dibutuhkan"].dropna().astype(str):
+                all_prodi.extend([p.strip() for p in val.split(",") if p.strip()])
+                
+            if not all_prodi:
+                st.info(t("mc.no_data_filter"))
+            else:
+                prodi_df = pd.Series(all_prodi).value_counts().head(10).reset_index()
+                prodi_df.columns = ["Prodi", "Count"]
+                prodi_df = prodi_df.sort_values("Count", ascending=True)
+
+                fig = px.bar(
+                    prodi_df, x="Count", y="Prodi", orientation="h",
+                    text="Count", color="Count", color_continuous_scale=["#1D4044", "#3462ED"]
+                )
+                apply_plotly_style(fig)
+                fig.update_layout(height=400, margin=dict(t=10, l=10, r=20, b=0), xaxis_title="", yaxis_title="", coloraxis_showscale=False)
+                fig.update_traces(textposition="outside", cliponaxis=False)
+                st.plotly_chart(fig, use_container_width=True)
+
+with col_r6_right:
+    with chart_panel(t("mc.chart_tools_demand"), height=460, subtitle=t("mc.chart_tools_demand_sub")):
+        if filtered.empty:
+            st.info(t("mc.no_data_filter"))
+        else:
+            if "deskripsi_requirement" not in filtered.columns:
+                desc_map = dict(zip(df_tr["id_talent_req"], df_tr["deskripsi_requirement"]))
+                filtered["deskripsi_requirement"] = filtered["id_talent_req"].map(desc_map).fillna("")
+
+            # Get unique tools from status_student
+            df_student = load_csv_table("status_student")
+            all_student_tools = []
+            for tools_list in df_student["tools"].dropna().astype(str):
+                all_student_tools.extend([t.strip() for t in tools_list.split(",") if t.strip()])
+            unique_tools = set(all_student_tools)
+
+            tool_counts = {tool: 0 for tool in unique_tools}
+            
+            for desc in filtered["deskripsi_requirement"].dropna().astype(str):
+                desc_lower = desc.lower()
+                for tool in unique_tools:
+                    if tool.lower() in desc_lower:
+                        tool_counts[tool] += 1
+            
+            tools_df = pd.DataFrame(list(tool_counts.items()), columns=["Tool", "Count"])
+            tools_df = tools_df[tools_df["Count"] > 0]
+            
+            if tools_df.empty:
+                st.info(t("mc.no_data_filter"))
+            else:
+                tools_df = tools_df.sort_values("Count", ascending=False).head(10).sort_values("Count", ascending=True)
+                
+                fig = px.bar(
+                    tools_df, x="Count", y="Tool", orientation="h",
+                    text="Count", color="Count", color_continuous_scale=["#1D4044", "#3462ED"]
+                )
+                apply_plotly_style(fig)
+                fig.update_layout(height=400, margin=dict(t=10, l=10, r=20, b=0), xaxis_title="", yaxis_title="", coloraxis_showscale=False)
+                fig.update_traces(textposition="outside", cliponaxis=False)
+                st.plotly_chart(fig, use_container_width=True)
+
 section_divider()
+
+st.markdown(f'''
+    <h3 style='margin-bottom: 0.2rem;'>{t("mc.salary_analysis_title")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("mc.salary_analysis_sub")}</p>
+    <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
+''', unsafe_allow_html=True)
+
+col_r7_left, col_r7_right = st.columns(2)
+
+def extract_salary(val):
+    val = str(val).lower()
+    if "rp" not in val:
+        return pd.NA
+    import re
+    # extract digits, ignoring dots
+    digits = re.sub(r'[^0-9]', '', val)
+    if digits:
+        return float(digits)
+    return pd.NA
+
+# Compute salary series
+if "renumerasi" not in filtered.columns:
+    renum_map = dict(zip(df_tr["id_talent_req"], df_tr["renumerasi"]))
+    filtered["renumerasi"] = filtered["id_talent_req"].map(renum_map).fillna("Unknown")
+
+filtered["salary_num"] = filtered["renumerasi"].apply(extract_salary)
+paid_reqs = filtered.dropna(subset=["salary_num"])
+
+with col_r7_left:
+    with chart_panel(t("mc.chart_remuneration"), height=460, subtitle=t("mc.chart_remuneration_sub")):
+        if filtered.empty:
+            st.info(t("mc.no_data_filter"))
+        else:
+
+            def categorize_renum(val):
+                v = str(val).lower()
+                if "non-paid" in v or "tidak dibayar" in v:
+                    return "Non-Paid"
+                elif "transport" in v:
+                    return "Uang Transport"
+                elif "rp" in v:
+                    return "Paid"
+                return "Unknown"
+
+            filtered["renumerasi_cat"] = filtered["renumerasi"].apply(categorize_renum)
+            renum_agg = filtered[filtered["renumerasi_cat"] != "Unknown"]["renumerasi_cat"].value_counts().reset_index()
+            renum_agg.columns = ["type", "count"]
+            renum_agg = renum_agg.sort_values("count", ascending=True)
+            
+            fig = px.bar(
+                renum_agg, x="count", y="type", orientation="h",
+                text="count", color="count", color_continuous_scale=["#1D4044", "#3462ED"]
+            )
+            apply_plotly_style(fig)
+            fig.update_layout(height=400, margin=dict(t=10, l=10, r=20, b=0), xaxis_title="", yaxis_title="", coloraxis_showscale=False)
+            fig.update_traces(textposition="outside", cliponaxis=False)
+            st.plotly_chart(fig, use_container_width=True)
+
+with col_r7_right:
+    with chart_panel(t("mc.chart_salary_dist"), height=460, subtitle=t("mc.chart_salary_dist_sub")):
+        if paid_reqs.empty:
+            st.info(t("mc.no_data_filter"))
+        else:
+            fig = px.histogram(
+                paid_reqs, x="salary_num", nbins=10,
+                color_discrete_sequence=[CHART_PALETTE[1]]
+            )
+            apply_plotly_style(fig)
+            fig.update_layout(
+                xaxis_title="Remunerasi (Rp)", yaxis_title="Jumlah Request", height=400,
+                bargap=0.1
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+
+# -------------------------------------------------------------------------
+# ROW 8: Deep Dive into Average Salary
+# -------------------------------------------------------------------------
+
+with chart_panel(t("mc.chart_salary_avg"), height=460, subtitle=t("mc.chart_salary_avg_sub")):
+    if paid_reqs.empty:
+        st.info(t("mc.no_data_filter"))
+    else:
+        view_mode = st.radio("Kategori:", ["Program Studi", "Tools"], horizontal=True, label_visibility="collapsed")
+        
+        if view_mode == "Program Studi":
+            prodi_salaries = []
+            for _, row in paid_reqs.iterrows():
+                prodis = [p.strip() for p in str(row.get("bidang_studi_dibutuhkan", "")).split(",") if p.strip()]
+                sal = row["salary_num"]
+                for p in prodis:
+                    prodi_salaries.append({"Prodi": p, "Salary": sal})
+            
+            if prodi_salaries:
+                sal_df = pd.DataFrame(prodi_salaries)
+                sal_agg = sal_df.groupby("Prodi")["Salary"].mean().reset_index().sort_values("Salary", ascending=False).head(10).sort_values("Salary", ascending=True)
+                fig = px.bar(
+                    sal_agg, x="Salary", y="Prodi", orientation="h",
+                    text="Salary", color="Salary", color_continuous_scale=["#1D4044", "#3462ED"]
+                )
+                fig.update_traces(texttemplate='Rp %{text:,.0f}', textposition="outside")
+            else:
+                fig = None
+        else:
+            if "unique_tools" not in locals():
+                df_student = load_csv_table("status_student")
+                all_student_tools = []
+                for tools_list in df_student["tools"].dropna().astype(str):
+                    all_student_tools.extend([t.strip() for t in tools_list.split(",") if t.strip()])
+                unique_tools = set(all_student_tools)
+
+            tool_salaries = {tool: [] for tool in unique_tools}
+            for _, row in paid_reqs.iterrows():
+                desc_lower = str(row.get("deskripsi_requirement", "")).lower()
+                sal = row["salary_num"]
+                for tool in unique_tools:
+                    if tool.lower() in desc_lower:
+                        tool_salaries[tool].append(sal)
+            
+            avg_tools = []
+            for tool, sals in tool_salaries.items():
+                if sals:
+                    avg_tools.append({"Tool": tool, "Salary": sum(sals)/len(sals)})
+            
+            if avg_tools:
+                sal_df = pd.DataFrame(avg_tools)
+                sal_agg = sal_df.sort_values("Salary", ascending=False).head(10).sort_values("Salary", ascending=True)
+                fig = px.bar(
+                    sal_agg, x="Salary", y="Tool", orientation="h",
+                    text="Salary", color="Salary", color_continuous_scale=["#1D4044", "#3462ED"]
+                )
+                fig.update_traces(texttemplate='Rp %{text:,.0f}', textposition="outside")
+            else:
+                fig = None
+        
+        if fig:
+            apply_plotly_style(fig)
+            fig.update_layout(height=380, margin=dict(t=10, l=10, r=40, b=0), xaxis_title="", yaxis_title="", coloraxis_showscale=False)
+            fig.update_xaxes(showticklabels=False)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info(t("mc.no_data_filter"))
+
+
+# -------------------------------------------------------------------------
+# ROW 9: Performance Leaderboards (Top 10 Acceptance & Rejection)
+# -------------------------------------------------------------------------
+section_divider()
+
+st.markdown(f'''
+    <h3 style='margin-bottom: 0.2rem;'>{t("mc.performance_leaderboard_title")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("mc.performance_leaderboard_sub")}</p>
+    <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
+''', unsafe_allow_html=True)
 
 # Prepare df_track for student metrics
 df_track = df_ts.copy()
@@ -443,7 +796,13 @@ with col_rej:
 # detail table
 section_divider()
 
-with table_panel(t("mc.detail_title"), height=500, subtitle=t("mc.detail_title_sub")):
+st.markdown(f'''
+    <h3 style='margin-bottom: 0.2rem;'>{t("mc.detail_title")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("mc.detail_title_sub")}</p>
+    <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
+''', unsafe_allow_html=True)
+
+with table_panel("", height=500):
     search_term = st.text_input(
         t("mc.search_label"), key="mc_search",
         placeholder=t("mc.search_placeholder"),
