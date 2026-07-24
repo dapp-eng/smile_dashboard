@@ -15,7 +15,7 @@ Sistem ini memetakan dan mengimplementasikan seluruh kebutuhan bisnis **BT-01 hi
 - **BT-05 (Ghosting Detection & Follow-up)**: Deteksi otomatis mahasiswa/perusahaan yang tidak aktif merespons (inaktif > 7/14/21/28 hari) untuk memicu tindakan follow-up.
 - **BT-06 (Student Eligibility Validation)**: Pengujian kelayakan mahasiswa berdasarkan ketersediaan CV, portofolio, status aktif, status ketersediaan, dan ambang batas IPK minimum.
 - **BT-07 (Periodic Reporting & Export PDF)**: Halaman Overview terpadu dengan KPI institusi dan fitur ekspor Laporan Periodik PDF dengan interpretasi analitis bahasa alami.
-- **BT-08 (Data Quality & Synchronization)**: Pemantauan kebaruan sinkronisasi data (staleness) serta deteksi ketidakcocokan atribut (mismatch) antara master data dan data status.
+- **BT-08 (Data Quality)**: Pemantauan kebaruan sinkronisasi data (staleness), reklasifikasi status finish, serta deteksi ketidakcocokan atribut (mismatch) antara master data dan data status.
 
 ---
 
@@ -36,12 +36,15 @@ Sistem ini memetakan dan mengimplementasikan seluruh kebutuhan bisnis **BT-01 hi
    - Analisis keberhasilan penempatan kandidat per perusahaan mitra.
 
 4. **Monitor Process (BT-02 & BT-05)**
-   - Visualisasi distribusi tahapan seleksi dan analisis tingkat penolakan (rejection rate).
-   - Sankey Diagram alur penolakan kandidat.
-   - Tabel deteksi ghosting dengan drill-down detail mahasiswa dan histori aplikasi lengkap.
+   - Rangkuman KPI Utama (Total Aplikasi Terlacak, Aplikasi Aktif, Placement, **Aplikasi Butuh Follow-Up**, dan **Aplikasi Ghosting** murni).
+   - Visualisasi distribusi tahapan seleksi, status proses, analisis penolakan per tahapan (rejection rate), dan Waterfall Chart alur pipeline.
+   - Sankey Diagram Alur Eskalasi Sistem (transisi status dari Label CDC ke Deteksi Otomatis Sistem).
+   - Visualisasi dampak deteksi sistem (Sunburst) dan Top 10 Perusahaan berdasarkan dampak ghosting.
+   - Master Table Mahasiswa (Individual Student Tracker) dengan filter interaktif dan drill-down detail histori aplikasi lengkap.
 
-5. **Data Synchronization (BT-08)**
-   - Analisis tingkat keusangan data (*Safe*, *Stale*, *Critical*).
+5. **Data Quality (BT-08)**
+   - Analisis tingkat keusangan data (*Safe*, *Stale*, *Critical*) berdasarkan tanggal sinkronisasi terakhir.
+   - Reklasifikasi status 'Finish' secara otomatis menggunakan kolom `rejection` untuk mengungkap hasil aktual kandidat (Placement, Ghosting, Rejected, Unresolved).
    - Deteksi ketidakcocokan field (Nama, Email, Semester, Phone, Prodi) antara dataset `STUDENT ALL` dan `STATUS STUDENT`.
 
 6. **Pengoperasian Mode Tampilan & Multi-Bahasa**
@@ -66,7 +69,7 @@ SSDC_SMILE/
 │   ├── 1_monitor_student.py # Halaman Monitor Mahasiswa (BT-06 & BT-01)
 │   ├── 2_monitor_company.py # Halaman Monitor Perusahaan (BT-03 & BT-04)
 │   ├── 3_monitor_process.py # Halaman Monitor Proses (BT-02 & BT-05)
-│   └── 4_data_quality.py    # Halaman Data Synchronization (BT-08)
+│   └── 4_data_quality.py    # Halaman Data Quality (BT-08)
 ├── utils/
 │   ├── charts.py            # Utility pembentuk chart Plotly
 │   ├── data_loader.py       # Pemuat data CSV & integrasi client Supabase

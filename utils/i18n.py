@@ -12,7 +12,7 @@ _TRANSLATIONS = {
     "page.monitor_student": {"id": "Monitor Mahasiswa", "en": "Monitor Student"},
     "page.monitor_company": {"id": "Monitor Perusahaan", "en": "Monitor Company"},
     "page.monitor_process": {"id": "Monitor Proses", "en": "Monitor Process"},
-    "page.data_sync": {"id": "Sinkronisasi Data", "en": "Data Synchronization"},
+    "page.data_sync": {"id": "Kualitas Data", "en": "Data Quality"},
 
     # sidebar section titles
     "sidebar.switch_mode": {"id": "MODE TAMPILAN", "en": "SWITCH MODE"},
@@ -258,6 +258,7 @@ _TRANSLATIONS = {
     "mp.total_tracked": {"id": "Total Aplikasi Terlacak", "en": "Total Applications Tracked"},
     "mp.active_in_process": {"id": "Aplikasi Aktif (Diproses)", "en": "Active Applications"},
     "mp.total_placement": {"id": "Aplikasi Berhasil (Placement)", "en": "Successful Applications (Placed)"},
+    "mp.total_followup": {"id": "Aplikasi Butuh Follow-Up", "en": "Applications Needing Follow-Up"},
     "mp.total_ghosted": {"id": "Aplikasi Ghosting", "en": "Ghosted Applications"},
     "mp.stage_dist": {"id": "Distribusi Tahapan", "en": "Stage Distribution"},
     "mp.process_status": {"id": "Status Proses (Aktif vs Selesai)", "en": "Process Status (Active vs Finished)"},
@@ -399,13 +400,13 @@ _TRANSLATIONS = {
 
     # data sync page
     "ds.caption": {
-        "id": "Pemeriksaan sinkronisasi data mahasiswa untuk validasi kelengkapan dan kebaruan",
-        "en": "Student data synchronization check for completeness and freshness validation",
+        "id": "Pemeriksaan kualitas data mahasiswa untuk validasi kelengkapan dan kebaruan",
+        "en": "Student data quality check for completeness and freshness validation",
     },
     "ds.semester": {"id": "Semester", "en": "Semester"},
     "ds.prodi": {"id": "Program Studi", "en": "Study Program"},
     "ds.sync_date_range": {"id": "Rentang Tanggal Sinkronisasi", "en": "Sync Date Range"},
-    "ds.no_data": {"id": "Tidak ada data untuk evaluasi sinkronisasi.", "en": "No data available for sync evaluation."},
+    "ds.no_data": {"id": "Tidak ada data untuk evaluasi kualitas data.", "en": "No data available for data quality evaluation."},
     "ds.no_data_filter": {"id": "Tidak ada data yang sesuai dengan filter yang dipilih.", "en": "No data matches the selected filters."},
     "ds.earliest_sync": {"id": "Tanggal Sinkronisasi Paling Awal", "en": "Earliest Sync Date"},
     "ds.latest_sync": {"id": "Tanggal Sinkronisasi Terbaru", "en": "Latest Sync Date"},
@@ -440,7 +441,7 @@ _TRANSLATIONS = {
     "ds.show_mismatch": {"id": "Tampilkan hanya data yang tidak cocok", "en": "Show only records with mismatched data"},
     "ds.showing_records": {"id": "Menampilkan {shown} dari {total} total record", "en": "Showing {shown} of {total} total records"},
 
-    "ds.section1_title": {"id": "Overview Sinkronisasi Data", "en": "Data Synchronization Overview"},
+    "ds.section1_title": {"id": "Overview Kualitas Data", "en": "Data Quality Overview"},
     "ds.section1_sub": {"id": "Status kebaruan dan kualitas data mahasiswa", "en": "Freshness and quality status of student data"},
     "ds.section2_title": {"id": "Reklasifikasi Status Finish", "en": "Finish Status Reclassification"},
     "ds.section2_sub": {"id": "Data mentah menggunakan status 'Finish' secara umum. Kami mereklasifikasi data ini menggunakan kolom 'rejection' untuk menampilkan hasil yang sebenarnya.", "en": "The raw data used 'Finish' as a catch-all close-out status. We reclassify these records using the 'rejection' column to reveal the true outcome."},

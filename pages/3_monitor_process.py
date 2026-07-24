@@ -57,12 +57,22 @@ total_tracked = len(df_track)
 finished_statuses = ["Placement", "Rejected", "Unresolved", "Ghosting"]
 active_in_process = len(df_track[~df_track["progress_student"].isin(finished_statuses)])
 total_placement = len(df_track[df_track["progress_student"] == "Placement"])
-total_ghosted = len(df_ghost)
+
+df_ghost_only = df_all_ghosting[df_all_ghosting["progress_student_system"] == "Ghosting"]
+df_followup_only = df_all_ghosting[df_all_ghosting["progress_student_system"].isin(["FU 1", "FU 2", "FU 3"])]
+
+total_ghosted = len(df_ghost_only)
+total_followup = len(df_followup_only)
 
 metric_strip([
     {"label": t("mp.total_tracked"), "value": f"{total_tracked:,}"},
     {"label": t("mp.active_in_process"), "value": f"{active_in_process:,}"},
     {"label": t("mp.total_placement"), "value": f"{total_placement:,}"},
+    {
+        "label": t("mp.total_followup"),
+        "value": f"{total_followup:,}",
+        "sentiment": "warning" if total_followup > 0 else "success",
+    },
     {
         "label": t("mp.total_ghosted"),
         "value": f"{total_ghosted:,}",
