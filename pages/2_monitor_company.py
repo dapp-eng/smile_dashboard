@@ -668,24 +668,73 @@ with table_panel("", height=500):
         placeholder=t("mc.search_placeholder"),
     )
 
+    placed_counts = df_ts[df_ts["progress_student"] == "Placement"].groupby("id_tracking_company").size()
+    
+    def calculate_priority(row):
+        req_date = pd.to_datetime(row.get("request_date"))
+        if pd.isna(req_date):
+            age_score = 0
+        else:
+            days_open = (pd.Timestamp.now() - req_date).days
+            days_open = max(0, days_open)
+            age_score = min(days_open / 30, 1.0) * 100
+
+        requested = float(row.get("jumlah_permintaan", 0))
+        if requested <= 0:
+            hc_gap_score = 0
+        else:
+            tc_id = row.get("id_tracking_company")
+            placed = placed_counts.get(tc_id, 0)
+            hc_gap_score = max(0, (requested - placed) / requested) * 100
+
+        progress = str(row.get("progress", "")).strip()
+        prog_map = {"Draft": 100, "Submitted": 80, "On Review": 60, "Shortlisted": 40, "Closed": 0}
+        prog_score = prog_map.get(progress, 0)
+
+        ptype = str(row.get("jenis_penempatan", "")).strip()
+        type_map = {"Full-time": 100, "Magang": 70, "Part-time": 50}
+        type_score = type_map.get(ptype, 0)
+
+        priority = (0.35 * age_score) + (0.30 * hc_gap_score) + (0.25 * prog_score) + (0.10 * type_score)
+        return round(priority, 1)
+
+    filtered["priority_score"] = filtered.apply(calculate_priority, axis=1)
+    
+    def get_priority_level(score):
+        if score >= 75: return "High"
+        if score >= 50: return "Medium"
+        return "Low"
+    
+    filtered["priority_level"] = filtered["priority_score"].apply(get_priority_level)
+
+    filtered["request_date"] = pd.to_datetime(filtered["request_date"], errors="coerce").dt.strftime('%d-%m-%Y')
+
+    filtered["hc_gap"] = filtered.apply(
+        lambda row: max(0, int(float(row.get("jumlah_permintaan", 0))) - int(float(row.get("jumlah_dikirimkan", 0)))), 
+        axis=1
+    )
+
     display_cols = [
-        "nama_perusahaan", "posisi", "jenis_penempatan", "industri_sektor",
-        "jumlah_permintaan", "jumlah_dikirimkan", "progress",
-        "request_date", "send_date",
+        "nama_perusahaan", "posisi", "jenis_penempatan",
+        "jumlah_permintaan", "jumlah_dikirimkan", "hc_gap", "progress",
+        "request_date", "priority_score", "priority_level",
     ]
     available_cols = [c for c in display_cols if c in filtered.columns]
     detail_df = filtered[available_cols].copy()
+    
+    detail_df = detail_df.sort_values("priority_score", ascending=False)
 
     col_labels = {
         "nama_perusahaan": "Company",
         "posisi": "Position",
         "jenis_penempatan": "Type",
-        "industri_sektor": "Industry",
         "jumlah_permintaan": "Requested",
         "jumlah_dikirimkan": "Sent",
+        "hc_gap": "Gap",
         "progress": "Progress",
         "request_date": "Request Date",
-        "send_date": "Send Date",
+        "priority_score": "Priority Score",
+        "priority_level": "Priority Level",
     }
     detail_df = detail_df.rename(columns=col_labels)
 
@@ -695,5 +744,28 @@ with table_panel("", height=500):
         )
         detail_df = detail_df[mask]
 
-    st.dataframe(detail_df, use_container_width=True, hide_index=True)
+    def style_priority(val):
+        if val == "High":
+            return "background-color: #FEE2E2; color: #DC2626; font-weight: bold;"
+        elif val == "Medium":
+            return "background-color: #FEF3C7; color: #D97706; font-weight: bold;"
+        elif val == "Low":
+            return "background-color: #D1FAE5; color: #059669; font-weight: bold;"
+        return ""
+
+    if "Priority Level" in detail_df.columns:
+        styled_df = detail_df.style.map(style_priority, subset=["Priority Level"])
+    else:
+        styled_df = detail_df
+
+    st.dataframe(
+        styled_df, 
+        use_container_width=True, 
+        hide_index=True,
+        column_config={
+            "Priority Score": st.column_config.ProgressColumn(
+                "Priority Score", min_value=0, max_value=100, format="%.1f"
+            ),
+        }
+    )
     st.caption(t("mc.showing_records", shown=f"{len(detail_df):,}", total=f"{total_requests:,}"))

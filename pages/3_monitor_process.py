@@ -719,6 +719,27 @@ with table_panel("", height=None):
 
         df_student_context = st.session_state["df_student_context"]
 
+        df_full_history = df_track.merge(df_company[['id_tracking_company', 'send_date']], on='id_tracking_company', how='left')
+        if not df_all_ghosting.empty and 'id_tracking_student' in df_all_ghosting.columns:
+            df_full_history = df_full_history.merge(df_all_ghosting[['id_tracking_student', 'progress_student_system', 'days_since_update']], on='id_tracking_student', how='left')
+        else:
+            df_full_history["progress_student_system"] = df_full_history["progress_student"]
+            df_full_history["days_since_update"] = 0
+
+        df_full_history["progress_student_system"] = df_full_history["progress_student_system"].fillna(df_full_history["progress_student"])
+        df_full_history["days_since_update"] = df_full_history["days_since_update"].fillna(0).astype(int)
+
+        df_history = df_full_history[df_full_history["NIM"].astype(str) == selected_nim].copy()
+        
+        latest_prog = "-"
+        latest_color = COLORS.get("neutral", "#E2E8F0")
+        if not df_history.empty:
+            df_history = df_history.sort_values("last_update", ascending=False)
+            latest_prog = str(df_history.iloc[0].get('progress_student_system', df_history.iloc[0].get("progress_student", "-")))
+            latest_color = PROGRESS_COLORS.get(latest_prog, COLORS.get("neutral", "#E2E8F0"))
+            
+        badge_html_profile = f'<span style="background-color: {latest_color}; border-radius: 12px; padding: 4px 10px; color: white; font-size: 12px; font-weight: 600; white-space: nowrap; display: inline-block; margin-top: 4px;">{latest_prog}</span>'
+
         student_info = df_student_context[df_student_context["NIM"].astype(str) == selected_nim]
         if not student_info.empty:
             student_info = student_info.iloc[0]
@@ -732,23 +753,11 @@ with table_panel("", height=None):
                         <div><strong style="opacity:0.7">Semester:</strong><br>{student_info['semester']}</div>
                         <div><strong style="opacity:0.7">IPK:</strong><br>{student_info.get('IPK', student_info.get('ipk', '-'))}</div>
                         <div><strong style="opacity:0.7">Status:</strong><br>{student_info.get('status', '-')}</div>
-                        <div><strong style="opacity:0.7">Domisili:</strong><br>{student_info.get('domisili', '-')}</div>
+                        <div><strong style="opacity:0.7">Latest Progress:</strong><br>{badge_html_profile}</div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True
             )
-
-        df_full_history = df_track.merge(df_company[['id_tracking_company', 'send_date']], on='id_tracking_company', how='left')
-        if not df_all_ghosting.empty and 'id_tracking_student' in df_all_ghosting.columns:
-            df_full_history = df_full_history.merge(df_all_ghosting[['id_tracking_student', 'progress_student_system', 'days_since_update']], on='id_tracking_student', how='left')
-        else:
-            df_full_history["progress_student_system"] = df_full_history["progress_student"]
-            df_full_history["days_since_update"] = 0
-
-        df_full_history["progress_student_system"] = df_full_history["progress_student_system"].fillna(df_full_history["progress_student"])
-        df_full_history["days_since_update"] = df_full_history["days_since_update"].fillna(0).astype(int)
-
-        df_history = df_full_history[df_full_history["NIM"].astype(str) == selected_nim].copy()
 
         if df_history.empty:
             st.info(t("mp.no_history"))

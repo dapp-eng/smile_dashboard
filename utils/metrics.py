@@ -144,9 +144,10 @@ def match_students_to_request(
     eligible: pd.DataFrame,
     request: pd.Series,
     *,
-    w_bidang: int = 45,
-    w_semester: int = 30,
-    w_tools: int = 25,
+    w_bidang: int = 40,
+    w_semester: int = 25,
+    w_tools: int = 20,
+    w_domisili: int = 15,
 ) -> pd.DataFrame:
     # bt-01: rank eligible students against one talent request
     df = eligible.copy()
@@ -175,16 +176,25 @@ def match_students_to_request(
             return 0.0
         hits = sum(1 for t in toks if t in requirement_txt)
         return hits / len(toks)
+    
+    def _domi_score(domi): 
+        doms = str(domi).strip().lower()
+        if not doms: 
+            return 0.0
+        else: 
+            return 1.0
 
     sem_num = pd.to_numeric(df["semester"], errors="coerce").fillna(0)
     df["match_bidang"] = df["program_studi"].map(_bidang_score)
     df["match_semester"] = (sem_num >= min_sem).astype(float)
     df["match_tools"] = df["tools"].map(_tools_score) if "tools" in df.columns else 0.0
+    df["match_domisili"] = df["domisili"].map(_domi_score) if "domisili" in df.columns else 0.0
 
     df["match_score"] = (
         df["match_bidang"] * w_bidang
         + df["match_semester"] * w_semester
         + df["match_tools"] * w_tools
+        + df["match_domisili"] * w_domisili
     ).round(1)
 
     return df.sort_values("match_score", ascending=False).reset_index(drop=True)
