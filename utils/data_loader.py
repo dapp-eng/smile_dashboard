@@ -45,7 +45,7 @@ def load_csv_table(table_name: str) -> pd.DataFrame:
     dialect = csv.Sniffer().sniff(sample)
     df = pd.read_csv(path, sep=dialect.delimiter, encoding="utf-8-sig")
 
-    # Normalize 'Finish' status using the rejection column
+    # normalize finish status using rejection column
     if table_name == "tracking_student":
         from utils.metrics import normalize_finish_status
         df = normalize_finish_status(df)

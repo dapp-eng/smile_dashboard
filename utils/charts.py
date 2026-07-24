@@ -46,7 +46,7 @@ def pie(df: pd.DataFrame, names: str, values: str, title: str = "",
 
 def donut(df: pd.DataFrame, names: str, values: str, title: str = "",
           width: int = None, height: int = 400, **kwargs):
-    # Use kwarg hole if provided, else default to 0.5
+    # use kwarg hole if provided, else default to 0.5
     hole = kwargs.pop("hole", 0.5)
     fig = px.pie(df, names=names, values=values, title=title, hole=hole,
                  width=width, height=height, **kwargs)

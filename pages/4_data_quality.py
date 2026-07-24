@@ -249,9 +249,7 @@ with table_panel(t("ds.master_table"), subtitle=t("ds.master_table_sub"), height
 
 section_divider()
 
-# -------------------------------------------------------------
-# Row 8: "Finish" Status Reclassification Analysis
-# -------------------------------------------------------------
+# finish status reclassification analysis
 df_tracking = load_csv_table("tracking_student")
 df_finish = df_tracking[df_tracking["_original_progress"] == "Finish"].copy()
 

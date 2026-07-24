@@ -32,17 +32,17 @@ def get_student_profiling_data():
     status_student = load_csv_table("status_student")
     import pandas as pd
     
-    # Keep only relevant columns to avoid memory bloat
+    # keep only relevant columns to avoid memory bloat
     s_all = student_all[["NIM", "bidang_minat", "jenis_penempatan_diminati"]].copy()
     s_status = status_student[["NIM", "semester", "program_studi", "IPK", "domisili", "tools"]].copy()
     
-    # Convert NIM to string to ensure safe merge
+    # convert nim to string to ensure safe merge
     s_all["NIM"] = s_all["NIM"].astype(str)
     s_status["NIM"] = s_status["NIM"].astype(str)
     
     df = pd.merge(s_all, s_status, on="NIM", how="inner")
     
-    # Ensure numeric columns are actually numeric
+    # ensure numeric columns are numeric
     df["IPK"] = pd.to_numeric(df["IPK"], errors="coerce")
     df["semester"] = pd.to_numeric(df["semester"], errors="coerce")
     

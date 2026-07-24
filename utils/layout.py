@@ -44,8 +44,9 @@ def _build_css(mode: str = "light") -> str:
     vs = theme_vars.get(mode, theme_vars["light"])
     root_vars = "".join(f"{k}:{v};" for k, v in vs.items())
 
-    dark_dataframe_css = """
-/* DARK MODE DATAFRAME CANVAS DARK NAVY SYNC (#1E293B) */
+    if mode == "dark":
+        dark_dataframe_css = """
+/* dark mode dataframe canvas sync */
 .stApp [data-testid="stDataFrame"] canvas,
 .stApp [data-testid="stDataFrame"] iframe,
 .stApp div[data-testid="stDataFrame"] canvas,
@@ -59,12 +60,175 @@ div[data-testid="stDataFrame"] {
     background: #1E293B !important;
     border-color: #334155 !important;
 }
-""" if mode == "dark" else ""
+"""
+        mode_select_css = """
+/* selectbox and popover dropdown styling for dark mode */
+div[data-baseweb="select"],
+div[data-baseweb="select"] > div,
+div[data-baseweb="select"] > div > div,
+[data-testid="stSelectbox"] div[data-baseweb="select"],
+[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+    background-color: #1E293B !important;
+    background: #1E293B !important;
+    color: #F1F5F9 !important;
+    border: 1px solid #475569 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+}
+
+div[data-baseweb="select"]:hover,
+div[data-baseweb="select"] > div:hover,
+[data-testid="stSelectbox"] div[data-baseweb="select"]:hover {
+    border-color: #3462ED !important;
+}
+
+div[data-baseweb="select"] span,
+div[data-baseweb="select"] p,
+div[data-baseweb="select"] input {
+    color: #F1F5F9 !important;
+    -webkit-text-fill-color: #F1F5F9 !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+div[data-baseweb="select"] svg {
+    fill: #F1F5F9 !important;
+    color: #F1F5F9 !important;
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+div[data-baseweb="select"] svg rect,
+div[data-baseweb="select"] [data-baseweb="icon"] {
+    fill: none !important;
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+body [data-baseweb="popover"],
+body [data-baseweb="popover"] > div,
+body [data-baseweb="popover"] ul,
+body [data-baseweb="popover"] [role="listbox"],
+body [data-baseweb="menu"],
+body ul[role="listbox"] {
+    background-color: #1E293B !important;
+    background: #1E293B !important;
+    color: #F1F5F9 !important;
+    border: 1px solid #475569 !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3) !important;
+}
+
+body [data-baseweb="popover"] li,
+body [data-baseweb="popover"] [role="option"],
+body ul[role="listbox"] li,
+body [role="option"] {
+    background-color: #1E293B !important;
+    background: #1E293B !important;
+    color: #F1F5F9 !important;
+}
+
+body [data-baseweb="popover"] [role="option"] *,
+body [role="option"] * {
+    color: #F1F5F9 !important;
+}
+
+body [data-baseweb="popover"] [role="option"]:hover,
+body [data-baseweb="popover"] [role="option"][aria-selected="true"],
+body [role="option"]:hover,
+body [role="option"][aria-selected="true"] {
+    background-color: #334155 !important;
+    background: #334155 !important;
+    color: #FFFFFF !important;
+}
+"""
+    else:
+        dark_dataframe_css = ""
+        mode_select_css = """
+/* selectbox and popover dropdown styling for light mode */
+div[data-baseweb="select"],
+div[data-baseweb="select"] > div,
+div[data-baseweb="select"] > div > div,
+[data-testid="stSelectbox"] div[data-baseweb="select"],
+[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+    background-color: #FFFFFF !important;
+    background: #FFFFFF !important;
+    color: #1E293B !important;
+    border: 1px solid #CBD5E1 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+div[data-baseweb="select"]:hover,
+div[data-baseweb="select"] > div:hover,
+[data-testid="stSelectbox"] div[data-baseweb="select"]:hover {
+    border-color: #3462ED !important;
+}
+
+div[data-baseweb="select"] span,
+div[data-baseweb="select"] p,
+div[data-baseweb="select"] input {
+    color: #1E293B !important;
+    -webkit-text-fill-color: #1E293B !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+div[data-baseweb="select"] svg {
+    fill: #1E293B !important;
+    color: #1E293B !important;
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+div[data-baseweb="select"] svg rect,
+div[data-baseweb="select"] [data-baseweb="icon"] {
+    fill: none !important;
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+body [data-baseweb="popover"],
+body [data-baseweb="popover"] > div,
+body [data-baseweb="popover"] ul,
+body [data-baseweb="popover"] [role="listbox"],
+body [data-baseweb="menu"],
+body ul[role="listbox"] {
+    background-color: #FFFFFF !important;
+    background: #FFFFFF !important;
+    color: #1E293B !important;
+    border: 1px solid #CBD5E1 !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
+}
+
+body [data-baseweb="popover"] li,
+body [data-baseweb="popover"] [role="option"],
+body ul[role="listbox"] li,
+body [role="option"] {
+    background-color: #FFFFFF !important;
+    background: #FFFFFF !important;
+    color: #1E293B !important;
+}
+
+body [data-baseweb="popover"] [role="option"] *,
+body [role="option"] * {
+    color: #1E293B !important;
+}
+
+body [data-baseweb="popover"] [role="option"]:hover,
+body [data-baseweb="popover"] [role="option"][aria-selected="true"],
+body [role="option"]:hover,
+body [role="option"][aria-selected="true"] {
+    background-color: #F1F5F9 !important;
+    background: #F1F5F9 !important;
+    color: #1E293B !important;
+}
+"""
 
     return f"""<style>
 :root {{{root_vars}}}
 
 {dark_dataframe_css}
+{mode_select_css}
 
 /* Streamlit Theme Variables Override for DataFrames and Canvas */
 :root {{
@@ -104,6 +268,10 @@ header[data-testid="stHeader"] * {{
 .block-container {{
     padding-top: 1.2rem !important;
     padding-bottom: 4rem !important;
+}}
+section[data-testid="stSidebar"],
+section[data-testid="stSidebar"] * {{
+    transition: none !important;
 }}
 section[data-testid="stSidebar"] > div:first-child {{
     padding-top: 1rem;
@@ -392,49 +560,96 @@ button[type="primary"] * {{
 }}
 
 /* 4. BASEWEB SELECT, MULTISELECT, INPUTS, POPOVERS & SEARCH BARS */
+
+/* outer wrapper for selects is transparent without border or extra padding */
 .stApp div[data-baseweb="select"],
-.stApp div[data-baseweb="select"] > div,
+div[data-baseweb="select"] {{
+    background-color: transparent !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}}
+
+/* inner sub-containers (ValueContainer, IconsContainer, EndEnhancer) MUST NOT HAVE BORDERS OR BACKGROUNDS */
+.stApp div[data-baseweb="select"] div,
+.stApp div[data-baseweb="input"] div,
+div[data-baseweb="select"] div,
+div[data-baseweb="input"] div {{
+    border: none !important;
+    background-color: transparent !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}}
+
+/* primary outer control box receives exactly ONE clean border, background, and border radius */
+.stApp div[data-baseweb="select"] > div:first-child,
 .stApp div[data-baseweb="base-input"],
 .stApp div[data-baseweb="input"],
-.stApp div[data-baseweb="input"] > div,
-.stApp input[data-testid="stTextInput"],
-.stApp .stTextInput input,
-div[data-baseweb="select"],
-div[data-baseweb="input"],
-div[data-baseweb="input"] > div {{
+div[data-baseweb="select"] > div:first-child,
+div[data-baseweb="input"] {{
     background-color: var(--widget-bg) !important;
     background: var(--widget-bg) !important;
-    color: var(--widget-text) !important;
-    border-color: var(--border-color) !important;
+    color: var(--text-color) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03) !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
 }}
 
-.stApp div[data-baseweb="input"] input,
+.stApp div[data-baseweb="select"] > div:first-child:hover,
+.stApp div[data-baseweb="input"]:hover,
+div[data-baseweb="select"] > div:first-child:hover {{
+    border-color: #3462ED !important;
+    box-shadow: 0 2px 6px var(--hover-shadow) !important;
+}}
+
+/* selected text, values, placeholders, spans, divs, and inputs inside selectboxes & drill downs */
+.stApp div[data-baseweb="select"] *,
+.stApp div[data-baseweb="select"] div,
+.stApp div[data-baseweb="select"] span,
+.stApp div[data-baseweb="select"] p,
 .stApp div[data-baseweb="select"] input,
+.stApp div[data-baseweb="input"] input,
+div[data-baseweb="select"] *,
+div[data-baseweb="select"] div,
+div[data-baseweb="select"] span,
+div[data-baseweb="select"] p,
+div[data-baseweb="select"] input,
+div[data-baseweb="select"] [role="combobox"],
 div[data-baseweb="input"] input {{
-    color: var(--widget-text) !important;
-    -webkit-text-fill-color: var(--widget-text) !important;
+    color: var(--text-color) !important;
+    -webkit-text-fill-color: var(--text-color) !important;
     background-color: transparent !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 13.5px !important;
 }}
 
-/* PLACEHOLDER TEXT VISIBILITY FIX FOR SEARCH BARS & INPUTS */
-.stApp input::placeholder,
-.stApp textarea::placeholder,
-.stApp div[data-baseweb="input"] input::placeholder,
+/* placeholder text override to ensure visibility in both light & dark mode */
+.stApp div[data-baseweb="select"] [class*="placeholder"],
+.stApp div[data-baseweb="select"] div[class*="ValueContainer"] > div,
 .stApp div[data-baseweb="select"] input::placeholder,
-div[data-baseweb="input"] input::placeholder,
-div[data-baseweb="input"] input::-webkit-input-placeholder,
-div[data-baseweb="input"] input::-moz-placeholder,
-div[data-baseweb="input"] input:-ms-input-placeholder {{
+.stApp div[data-baseweb="input"] input::placeholder,
+div[data-baseweb="select"] [class*="placeholder"],
+div[data-baseweb="select"] div[class*="ValueContainer"] > div,
+input::placeholder,
+textarea::placeholder {{
     color: var(--muted-color) !important;
     -webkit-text-fill-color: var(--muted-color) !important;
-    opacity: 1 !important;
+    opacity: 0.9 !important;
+    font-size: 13.5px !important;
 }}
 
-div[data-baseweb="select"] span,
-div[data-baseweb="select"] div {{
-    color: var(--widget-text) !important;
+/* dropdown chevron icon styling */
+.stApp div[data-baseweb="select"] svg,
+div[data-baseweb="select"] svg {{
+    fill: var(--text-color) !important;
+    color: var(--text-color) !important;
+    opacity: 0.85 !important;
 }}
 
+/* popover & dropdown menu container */
 div[data-baseweb="popover"],
 div[data-baseweb="popover"] > div,
 div[data-baseweb="menu"],
@@ -442,6 +657,8 @@ ul[data-baseweb="menu"] {{
     background-color: var(--dropdown-bg) !important;
     color: var(--dropdown-text) !important;
     border: 1px solid var(--border-color) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15) !important;
 }}
 div[data-baseweb="popover"] li,
 ul[data-baseweb="menu"] li,
@@ -449,15 +666,34 @@ div[data-baseweb="option"],
 div[data-baseweb="option"] * {{
     background-color: var(--dropdown-bg) !important;
     color: var(--dropdown-text) !important;
+    -webkit-text-fill-color: var(--dropdown-text) !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 13.5px !important;
 }}
+div[data-baseweb="option"]:hover,
+div[data-baseweb="option"]:hover *,
+div[data-baseweb="option"][aria-selected="true"],
+div[data-baseweb="option"][aria-selected="true"] *,
+li[aria-selected="true"],
+li[aria-selected="true"] * {{
+    background-color: var(--table-header-bg) !important;
+    color: var(--text-color) !important;
+    -webkit-text-fill-color: var(--text-color) !important;
+}}
+
+/* multiselect pills / tags */
 div[data-baseweb="tag"],
 span[data-baseweb="tag"] {{
-    background-color: rgba(52, 98, 237, 0.15) !important;
-    border: 1px solid var(--border-color) !important;
+    background-color: rgba(52, 98, 237, 0.14) !important;
+    border: 1px solid rgba(52, 98, 237, 0.3) !important;
+    border-radius: 6px !important;
+    padding: 2px 8px !important;
 }}
 div[data-baseweb="tag"] *,
 span[data-baseweb="tag"] * {{
     color: var(--text-color) !important;
+    -webkit-text-fill-color: var(--text-color) !important;
+    font-weight: 500 !important;
 }}
 
 /* 3. CHECKBOX VERTICAL CENTERING & ALIGNMENT */
@@ -518,12 +754,19 @@ div[data-testid="stCheckbox"] label {{
     margin: 28px 0 20px;
 }}
 
-/* sidebar dark background (constant navy in both light and dark modes) */
+/* sidebar background */
 section[data-testid="stSidebar"] {{
-    background: linear-gradient(180deg, #121F45 0%, #0D1733 100%) !important;
+    background: linear-gradient(180deg, {'#1E3A7A 0%, #162E62 100%' if mode == 'light' else '#121F45 0%, #0D1733 100%'}) !important;
 }}
 
-/* remove Streamlit native nav separators & pull footer up closer to nav */
+/* sidebar logo */
+section[data-testid="stSidebar"] img[data-testid="stLogo"] {{
+    max-height: 46px !important;
+    width: auto !important;
+    margin-bottom: 2px !important;
+}}
+
+/* sidebar navigation layout */
 section[data-testid="stSidebar"] [data-testid="stSidebarNavSeparator"],
 section[data-testid="stSidebar"] nav + hr,
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] + hr {{
@@ -531,82 +774,99 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] + hr {{
 }}
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{
     border-bottom: none !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    margin-bottom: -10px !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stSidebarNav"] ul {{
+    padding-top: 0 !important;
     padding-bottom: 0 !important;
     margin-bottom: 0 !important;
 }}
+section[data-testid="stSidebar"] nav a {{
+    padding-top: 3px !important;
+    padding-bottom: 3px !important;
+    margin-bottom: 1px !important;
+    border-radius: 6px !important;
+    font-size: 13px !important;
+    transition: background 0.2s ease, transform 0.15s ease !important;
+}}
+section[data-testid="stSidebar"] nav a:hover {{
+    background: rgba(255,255,255,0.12) !important;
+    transform: translateX(2px);
+}}
+section[data-testid="stSidebar"] nav a[aria-selected="true"],
+section[data-testid="stSidebar"] nav a[aria-current="page"] {{
+    background: rgba(255,255,255,0.18) !important;
+    border-left: 3px solid {'#7AADFF' if mode == 'light' else '#3462ED'} !important;
+}}
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] + div[data-testid="stElementContainer"] {{
-    margin-top: -14px !important;
+    margin-top: -6px !important;
 }}
 
-/* single clean divider lines in sidebar — top divider line perfectly centered vertically */
+/* compact buttons inside sidebar */
+section[data-testid="stSidebar"] button {{
+    min-height: 28px !important;
+    padding: 2px 4px !important;
+    font-size: 11.5px !important;
+}}
+
+/* sidebar dividers */
 section[data-testid="stSidebar"] .sidebar-divider-top {{
     border: none !important;
-    border-top: 1px solid rgba(255,255,255,0.12) !important;
-    margin: 0 0 12px 0 !important;
+    border-top: 1px solid rgba(255,255,255,0.15) !important;
+    margin: 4px 0 6px 0 !important;
     padding: 0 !important;
     height: 0 !important;
 }}
 section[data-testid="stSidebar"] .sidebar-divider {{
     border: none !important;
-    border-top: 1px solid rgba(255,255,255,0.12) !important;
-    margin: 14px 0 !important;
+    border-top: 1px solid rgba(255,255,255,0.15) !important;
+    margin: 4px 0 !important;
     padding: 0 !important;
     height: 0 !important;
 }}
 
-/* sidebar section title (centered) */
+/* sidebar section title */
 section[data-testid="stSidebar"] .sidebar-section-title {{
     font-family: 'Inter', sans-serif;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 700;
     color: rgba(255,255,255,0.45) !important;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.10em;
     text-align: center;
-    margin: 0 0 6px 0;
+    margin: 2px 0 4px 0 !important;
 }}
 
-/* sidebar mode active icon (large, centered, consistent size) */
-section[data-testid="stSidebar"] .sidebar-mode-icon {{
-    text-align: center;
-    font-size: 30px;
-    line-height: 1;
-    height: 34px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 2px 0 6px 0;
-    user-select: none;
-}}
-
-/* sidebar info panel (sumber data box - equal top & bottom spacing) */
+/* sidebar info panel */
 section[data-testid="stSidebar"] .sidebar-info {{
     font-family: 'Inter', sans-serif;
-    margin: 14px 0;
-    padding: 16px;
+    margin: 4px 0;
+    padding: 8px 10px;
     background: rgba(255,255,255,0.04);
-    border-radius: 12px;
+    border-radius: 8px;
     border: 1px solid rgba(255,255,255,0.08);
 }}
 section[data-testid="stSidebar"] .sidebar-info-title {{
-    font-size: 9px !important;
+    font-size: 8px !important;
     font-weight: 700 !important;
     color: rgba(255,255,255,0.45) !important;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
-    margin: 0 0 10px 0 !important;
+    letter-spacing: 0.10em;
+    margin: 0 0 4px 0 !important;
     text-align: left;
 }}
 section[data-testid="stSidebar"] .sidebar-info-row {{
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 12px !important;
-    margin: 6px 0 !important;
-    line-height: 1.4 !important;
+    font-size: 11px !important;
+    margin: 2px 0 !important;
+    line-height: 1.25 !important;
 }}
 
-/* FORCE LIGHT TEXT ON SIDEBAR ELEMENTS REGARDLESS OF THEME MODE */
+/* sidebar text colors */
 section[data-testid="stSidebar"] .sidebar-info-row span {{
     color: rgba(255,255,255,0.7) !important;
 }}
@@ -619,35 +879,13 @@ section[data-testid="stSidebar"] nav a p {{
     color: rgba(255,255,255,0.85) !important;
 }}
 
-/* sidebar logo */
-section[data-testid="stSidebar"] img[data-testid="stLogo"] {{
-    max-height: 80px !important;
-    width: auto !important;
-}}
-
-/* sidebar nav items */
-section[data-testid="stSidebar"] nav a {{
-    border-radius: 8px !important;
-    transition: background 0.2s ease, transform 0.15s ease !important;
-    margin-bottom: 2px !important;
-}}
-section[data-testid="stSidebar"] nav a:hover {{
-    background: rgba(52,98,237,0.12) !important;
-    transform: translateX(2px);
-}}
-section[data-testid="stSidebar"] nav a[aria-selected="true"],
-section[data-testid="stSidebar"] nav a[aria-current="page"] {{
-    background: rgba(52,98,237,0.2) !important;
-    border-left: 3px solid #3462ED !important;
-}}
-
-/* sidebar version tag (centered) */
+/* sidebar version tag */
 section[data-testid="stSidebar"] .sidebar-version {{
     font-family: 'Inter', sans-serif;
-    font-size: 11px;
+    font-size: 10px;
     color: rgba(255,255,255,0.35) !important;
     text-align: center;
-    margin: 10px 0 0 0;
+    margin: 4px 0 2px 0 !important;
     padding: 0;
 }}
 
@@ -675,7 +913,6 @@ div[data-testid="stMetric"] [data-testid="stMetricLabel"] p {{
 div[data-testid="stMetric"] [data-testid="stMetricValue"] {{
     color: var(--text-color) !important;
 }}
-div[data-baseweb="select"] {{ border-radius: 10px !important; }}
 
 /* text input and placeholder overrides */
 input[data-testid="stTextInput"],
@@ -858,21 +1095,19 @@ def render_sidebar_brand():
     # logo is rendered via st.logo in app.py; this is a no-op fallback
     pass
 
-
 def render_sidebar_footer():
-    # info panel + version tag + mode/lang controls in sidebar with clean vertical spacing
+    # mode/lang controls, data source info, and version tag in sidebar
     current_mode = _get_mode()
     current_lang = get_lang()
 
     with st.sidebar:
-        # single clean divider separating navigation links from footer controls (centered spacing)
         st.markdown('<hr class="sidebar-divider-top">', unsafe_allow_html=True)
 
-        # mode title + single centered active SVG icon (yellow sun circle / blue moon circle) with balanced spacing
+        # mode toggle icon (large centered SVG with comfortable vertical spacing)
         if current_mode == "light":
-            mode_icon_html = '<div style="display:flex; align-items:center; justify-content:center; margin:10px auto 14px auto;"><div style="width:42px; height:42px; border-radius:50%; background:#F7C948; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 12px rgba(247,201,72,0.45);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4" fill="#FFFFFF" stroke="none"></circle><line x1="12" y1="2" x2="12" y2="4"></line><line x1="12" y1="20" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="4" y2="12"></line><line x1="20" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line></svg></div></div>'
+            mode_icon_html = '<div style="display:flex;align-items:center;justify-content:center;margin:6px auto 8px auto;"><div style="width:36px;height:36px;border-radius:50%;background:#F7C948;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(247,201,72,0.45);"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4" fill="#FFFFFF" stroke="none"></circle><line x1="12" y1="2" x2="12" y2="4"></line><line x1="12" y1="20" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="4" y2="12"></line><line x1="20" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line></svg></div></div>'
         else:
-            mode_icon_html = '<div style="display:flex; align-items:center; justify-content:center; margin:10px auto 14px auto;"><div style="width:42px; height:42px; border-radius:50%; background:#24A2FF; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 12px rgba(36,162,255,0.45);"><svg width="18" height="18" viewBox="0 0 24 24" fill="#FFFFFF" stroke="none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg></div></div>'
+            mode_icon_html = '<div style="display:flex;align-items:center;justify-content:center;margin:6px auto 8px auto;"><div style="width:36px;height:36px;border-radius:50%;background:#24A2FF;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(36,162,255,0.45);"><svg width="15" height="15" viewBox="0 0 24 24" fill="#FFFFFF" stroke="none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg></div></div>'
 
         st.markdown(
             f'<div class="sidebar-section-title">{t("sidebar.switch_mode")}</div>{mode_icon_html}',
@@ -891,10 +1126,8 @@ def render_sidebar_footer():
                 st.session_state["theme_mode"] = "dark"
                 st.rerun()
 
-        # language title (dynamic translation, centered, compact top margin)
-        st.markdown(f"""
-        <div class="sidebar-section-title" style="margin-top: 10px;">{t("sidebar.language")}</div>
-        """, unsafe_allow_html=True)
+        # language toggle
+        st.markdown(f'<div class="sidebar-section-title" style="margin-top:8px;">{t("sidebar.language")}</div>', unsafe_allow_html=True)
 
         lc1, lc2 = st.columns(2)
         with lc1:
@@ -908,37 +1141,30 @@ def render_sidebar_footer():
                 set_lang("en")
                 st.rerun()
 
-        # divider before sumber data box
         st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
 
-        # sumber data box (contents untouched, box container perfectly spaced)
+        # compact data source info (no Supabase, single-line layout)
+        tables_label = t("sidebar.tables")
+        storage_label = t("sidebar.storage")
+        sync_label = t("sidebar.sync")
+        auto_label = t("sidebar.auto")
         st.markdown(
-            '<div class="sidebar-info">'
+            f'<div class="sidebar-info">'
             f'<p class="sidebar-info-title">{t("sidebar.data_source")}</p>'
-            '<div class="sidebar-info-row">'
-            f'<span>{t("sidebar.tables")}</span>'
-            '<span class="sidebar-info-value">6 tables</span>'
-            '</div>'
-            '<div class="sidebar-info-row">'
-            f'<span>{t("sidebar.storage")}</span>'
-            '<span class="sidebar-info-value">CSV + Supabase</span>'
-            '</div>'
-            '<div class="sidebar-info-row">'
-            f'<span>{t("sidebar.sync")}</span>'
-            f'<span class="sidebar-info-value">{t("sidebar.auto")}</span>'
-            '</div>'
-            '</div>',
+            f'<div class="sidebar-info-row"><span>{tables_label}</span><span class="sidebar-info-value">6 tables</span></div>'
+            f'<div class="sidebar-info-row"><span>{storage_label}</span><span class="sidebar-info-value">CSV</span></div>'
+            f'<div class="sidebar-info-row"><span>{sync_label}</span><span class="sidebar-info-value">{auto_label}</span></div>'
+            f'</div>',
             unsafe_allow_html=True,
         )
 
-        # divider after sumber data box
-        st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
-
-        # footer version tag (centered)
+        # version tag (no extra divider above, small margin only)
         st.markdown(
-            '<p class="sidebar-version">SMILE v1.0 &nbsp;|&nbsp; SSDC 2026</p>',
+            '<p class="sidebar-version" style="margin-top:5px;">SMILE v1.0 &nbsp;|&nbsp; SSDC 2026</p>',
             unsafe_allow_html=True,
         )
+
+
 
 
 def render_mode_toggle():

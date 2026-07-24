@@ -4,20 +4,8 @@ import pandas as pd
 
 
 def normalize_finish_status(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Reclassify 'Finish' in progress_student using the rejection column.
-
-    The raw data uses 'Finish' as a catch-all close-out status regardless of
-    the actual outcome. The rejection column holds the real outcome, so we
-    use it to remap:
-        Finish + Placement          → Placement
-        Finish + Ghosting           → Ghosting
-        Finish + Rejection *        → Rejected
-        Finish + On Progress / else → Unresolved
-
-    The original value is preserved in '_original_progress' so the
-    data-quality page can still surface these records.
-    """
+    # reclassify finish in progress_student using rejection column
+    # the original value is preserved in '_original_progress' so the data-quality page can still surface these records.
     df = df.copy()
     df["_original_progress"] = df["progress_student"]
 
@@ -25,7 +13,7 @@ def normalize_finish_status(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[mask & (df["rejection"] == "Placement"), "progress_student"] = "Placement"
     df.loc[mask & (df["rejection"] == "Ghosting"), "progress_student"] = "Ghosting"
     df.loc[mask & df["rejection"].str.contains("Reject", na=False), "progress_student"] = "Rejected"
-    # Remaining Finish rows (typically rejection == "On Progress")
+    # remaining finish rows (typically rejection == "On Progress")
     df.loc[df["progress_student"] == "Finish", "progress_student"] = "Unresolved"
 
     return df

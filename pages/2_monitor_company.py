@@ -1,9 +1,8 @@
-# monitor company - bt-03 talent request management, bt-04 success rate
+# monitor company - company demographics, volume, trend, and performance leaderboard (bt-03, bt-04)
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 
 from utils.layout import (
     inject_global_css, page_header, metric_strip,
@@ -15,6 +14,7 @@ from utils.theme import (
 )
 from utils.data_loader import load_csv_table
 from utils.i18n import t
+from utils import metrics
 
 inject_global_css()
 
@@ -23,18 +23,17 @@ page_header(
     bt_caption=t("bt.03_04"),
 )
 
-# load data
+# load core tables
 df_company = load_csv_table("company")
 df_tc = load_csv_table("tracking_company")
 df_tr = load_csv_table("talent_request")
 df_ts = load_csv_table("tracking_student")
 
-# parse dates
+# parse request and send dates
 df_tc["request_date"] = pd.to_datetime(df_tc["request_date"], dayfirst=True, errors="coerce")
 df_tc["send_date"] = pd.to_datetime(df_tc["send_date"], dayfirst=True, errors="coerce")
-df_tr["request_date"] = pd.to_datetime(df_tr["request_date"], errors="coerce")
 
-# enrich tracking_company with additional fields for filtering
+# enrich tracking_company with sector, headcount, working arrangement from talent_request
 df_tc_enriched = df_tc.merge(
     df_tr[["id_talent_req", "industri_sektor", "headcount", "working_arrangement"]],
     on="id_talent_req", how="left",
@@ -44,43 +43,45 @@ df_tc_enriched = df_tc_enriched.merge(
     on="id_company", how="left",
 )
 
-# filters
+# filter bar tailored for company exploration
 with filter_bar():
-    fc1, fc2, fc3, fc4 = st.columns(4)
+    fc1, fc2, fc3 = st.columns(3)
     with fc1:
-        sel_jenis = st.multiselect(
-            t("mc.placement_type"),
-            options=sorted(df_tc_enriched["jenis_penempatan"].dropna().unique()),
-            default=[], key="mc_jenis",
-        )
-    with fc2:
         sel_industry = st.multiselect(
             t("mc.industry_sector"),
             options=sorted(df_tc_enriched["industri_sektor"].dropna().unique()),
             default=[], key="mc_industry",
         )
-    with fc3:
+    with fc2:
         sel_scale = st.multiselect(
             t("mc.company_scale"),
             options=sorted(df_tc_enriched["skala_perusahaan"].dropna().unique()),
             default=[], key="mc_scale",
         )
+    with fc3:
+        sel_city = st.multiselect(
+            t("mc.city_location"),
+            options=sorted(df_tc_enriched["kota"].dropna().unique()),
+            default=[], key="mc_city",
+        )
+
+    fc4, fc5, fc6 = st.columns(3)
     with fc4:
+        sel_jenis = st.multiselect(
+            t("mc.placement_type"),
+            options=sorted(df_tc_enriched["jenis_penempatan"].dropna().unique()),
+            default=[], key="mc_jenis",
+        )
+    with fc5:
         sel_progress = st.multiselect(
             t("mc.request_progress"),
             options=sorted(df_tc_enriched["progress"].dropna().unique()),
             default=[], key="mc_progress",
         )
-
-    date_col, _ = st.columns([1, 1])
-    with date_col:
+    with fc6:
         valid_dates = df_tc_enriched["request_date"].dropna()
-        if len(valid_dates) > 0:
-            min_date = valid_dates.min().date()
-            max_date = valid_dates.max().date()
-        else:
-            min_date = pd.Timestamp("2023-01-01").date()
-            max_date = pd.Timestamp("2026-12-31").date()
+        min_date = valid_dates.min().date() if len(valid_dates) > 0 else pd.Timestamp("2023-01-01").date()
+        max_date = valid_dates.max().date() if len(valid_dates) > 0 else pd.Timestamp("2026-12-31").date()
         date_range = st.date_input(
             t("mc.date_range"),
             value=(min_date, max_date),
@@ -98,45 +99,63 @@ if sel_scale:
     filtered = filtered[filtered["skala_perusahaan"].isin(sel_scale)]
 if sel_progress:
     filtered = filtered[filtered["progress"].isin(sel_progress)]
+if sel_city:
+    filtered = filtered[filtered["kota"].isin(sel_city)]
 if isinstance(date_range, tuple) and len(date_range) == 2:
     start_dt = pd.Timestamp(date_range[0])
     end_dt = pd.Timestamp(date_range[1])
     mask = filtered["request_date"].notna()
     filtered = filtered[mask & (filtered["request_date"] >= start_dt) & (filtered["request_date"] <= end_dt)]
 
-# linked tracking_student rows
 tc_ids = set(filtered["id_tracking_company"])
 filtered_ts = df_ts[df_ts["id_tracking_company"].isin(tc_ids)]
 
-# kpi computation
-total_requests = len(filtered)
-total_headcount = int(filtered["jumlah_permintaan"].sum())
-total_sent = int(filtered["jumlah_dikirimkan"].sum())
-placements = len(filtered_ts[filtered_ts["progress_student"] == "Placement"])
-fulfillment_pct = round(placements / total_headcount * 100, 1) if total_headcount > 0 else 0.0
+# company-oriented kpis computation
+comp_name_col = "company_name" if "company_name" in df_company.columns else ("nama_perusahaan" if "nama_perusahaan" in df_company.columns else "id_company")
+total_db_companies = len(df_company[comp_name_col].dropna().unique())
+filtered_companies = set(filtered["nama_perusahaan"].dropna().unique())
+num_req_companies = len(filtered_companies)
 
-valid_resp = filtered.dropna(subset=["request_date", "send_date"])
-avg_resp_days = round(
-    (valid_resp["send_date"] - valid_resp["request_date"]).dt.days.mean(), 1
-) if len(valid_resp) > 0 else 0.0
+active_companies = set(filtered[filtered["progress"] != "Closed"]["nama_perusahaan"].dropna().unique())
+num_active_companies = len(active_companies)
+
+placed_ts = filtered_ts[filtered_ts["progress_student"] == "Placement"]
+placed_companies = set(placed_ts["company"].dropna().unique()) if not placed_ts.empty else set()
+num_placed_companies = len(placed_companies)
+placed_comp_pct = round(num_placed_companies / num_req_companies * 100, 1) if num_req_companies > 0 else 0.0
+
+total_placements = len(placed_ts)
+total_headcount = int(filtered["jumlah_permintaan"].sum())
+
+avg_headcount_per_comp = round(total_headcount / num_req_companies, 1) if num_req_companies > 0 else 0.0
 
 st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 metric_strip([
-    {"label": t("mc.total_requests"), "value": f"{total_requests:,}"},
-    {"label": t("mc.total_headcount"), "value": f"{total_headcount:,}"},
-    {"label": t("mc.candidates_sent"), "value": f"{total_sent:,}"},
     {
-        "label": t("mc.fulfillment_rate"),
-        "value": f"{fulfillment_pct}%",
-        "delta": f"{placements:,} {t('overview.placed')}",
-        "sentiment": "success" if fulfillment_pct >= 50 else "warning" if fulfillment_pct >= 25 else "danger",
+        "label": t("mc.kpi_companies_requested"),
+        "value": f"{num_req_companies:,}",
     },
-    {"label": t("mc.avg_response"), "value": f"{avg_resp_days} {t('mc.days')}"},
+    {
+        "label": t("mc.kpi_active_contacts"),
+        "value": f"{num_active_companies:,}",
+    },
+    {
+        "label": t("mc.kpi_placed_partners"),
+        "value": f"{num_placed_companies:,}",
+        "delta": f"{placed_comp_pct}% success",
+        "sentiment": "success" if placed_comp_pct >= 50 else "warning",
+    },
+    {
+        "label": t("mc.kpi_total_placements"),
+        "value": f"{total_placements:,}",
+    },
+    {
+        "label": t("mc.kpi_avg_headcount"),
+        "value": f"{avg_headcount_per_comp}",
+    },
 ])
 
-# -------------------------------------------------------------------------
-# ROW 1: Demographics Overview (Industry Sector & Company Type)
-# -------------------------------------------------------------------------
+# demographics: industry treemap and company type treemap
 section_divider()
 
 st.markdown(f'''
@@ -179,11 +198,7 @@ with col_r1_right:
             fig.update_traces(textinfo="label+value", textfont_size=12)
             st.plotly_chart(fig, use_container_width=True)
 
-
-# -------------------------------------------------------------------------
-# ROW 2: Volume Leaderboard & Scale
-# -------------------------------------------------------------------------
-
+# company scale donut and top 10 volume leaderboard
 col_r2_left, col_r2_right = st.columns([2, 3])
 
 with col_r2_left:
@@ -195,7 +210,7 @@ with col_r2_left:
             scale_agg.columns = ["scale", "count"]
             fig = px.pie(
                 scale_agg, names="scale", values="count", hole=0.5,
-                color_discrete_sequence=CHART_PALETTE[3:],
+                color_discrete_sequence=CHART_PALETTE[2:],
             )
             fig.update_traces(
                 textinfo="label+percent", textposition="outside",
@@ -217,50 +232,34 @@ with col_r2_right:
                 .reset_index()
                 .nlargest(10, "requests")
             )
-            fig = px.bar(
-                company_vol, x="requests", y="nama_perusahaan", orientation="h",
-                color_discrete_sequence=[CHART_PALETTE[0]], text="nama_perusahaan",
-            )
-            fig.update_traces(
-                textposition='outside',
-                constraintext='none',
-                cliponaxis=False
-            )
-            
+            # build annotations for bar labels since text inside dark bars needs white
             annotations = []
             for _, row in company_vol.iterrows():
                 if row["requests"] > 0:
                     annotations.append(dict(
-                        x=row["requests"],
-                        y=row["nama_perusahaan"],
+                        x=row["requests"], y=row["nama_perusahaan"],
                         text=str(row["requests"]),
-                        xanchor='right',
-                        xshift=-5,
-                        yanchor='middle',
-                        showarrow=False,
-                        font=dict(color="white", size=10)
+                        xanchor="right", xshift=-5, yanchor="middle",
+                        showarrow=False, font=dict(color="white", size=10)
                     ))
-
+            fig = px.bar(
+                company_vol, x="requests", y="nama_perusahaan", orientation="h",
+                color_discrete_sequence=[CHART_PALETTE[0]],
+            )
             apply_plotly_style(fig)
             fig.update_layout(
                 yaxis=dict(
-                    categoryorder="total ascending", 
-                    title=dict(text=t("mc.company"), standoff=20),
-                    showticklabels=False,
-                    automargin=False
+                    categoryorder="total ascending", title=t("mc.company"),
+                    showticklabels=False, automargin=False
                 ),
                 xaxis_title=t("mc.total_headcount_req"), height=400,
-                annotations=annotations,
-                margin=dict(l=30)
+                annotations=annotations, margin=dict(l=30)
             )
             max_val = company_vol["requests"].max() if not company_vol.empty else 1
             fig.update_xaxes(range=[0, max_val * 1.6])
             st.plotly_chart(fig, use_container_width=True)
 
-
-# -------------------------------------------------------------------------
-# ROW 3: Trend Analysis (Monthly Distribution)
-# -------------------------------------------------------------------------
+# monthly request trend (full width)
 section_divider()
 
 st.markdown(f'''
@@ -291,481 +290,223 @@ with chart_panel(t("mc.chart_monthly"), height=460, subtitle=t("mc.chart_monthly
         fig.update_traces(line=dict(width=2.5), fillcolor="rgba(52,98,237,0.08)")
         st.plotly_chart(fig, use_container_width=True)
 
-
-# -------------------------------------------------------------------------
-# ROW 4: Operations Overview (Pipeline & Sumber Form)
-# -------------------------------------------------------------------------
-
-col_r4_left, col_r4_right = st.columns(2)
-
-with col_r4_left:
-    with chart_panel(t("mc.chart_sumber_form"), height=460, subtitle=t("mc.chart_sumber_form_sub")):
-        if filtered.empty:
-            st.info(t("mc.no_data_filter"))
-        else:
-            if "sumber_baris_form" not in filtered.columns:
-                sumber_map = dict(zip(df_tr["id_talent_req"], df_tr["sumber_baris_form"]))
-                filtered["sumber_baris_form"] = filtered["id_talent_req"].map(sumber_map).fillna("Unknown")
-
-            sumber_agg = filtered["sumber_baris_form"].value_counts().reset_index()
-            sumber_agg.columns = ["source", "count"]
-            fig = px.pie(
-                sumber_agg, names="source", values="count", hole=0.5,
-                color_discrete_sequence=CHART_PALETTE,
-            )
-            fig.update_traces(
-                textinfo="label+percent", textposition="outside",
-                pull=[0.02] * len(sumber_agg),
-            )
-            apply_plotly_style(fig)
-            fig.update_layout(height=400, showlegend=False, margin=dict(t=30, b=30, l=10, r=10))
-            st.plotly_chart(fig, use_container_width=True)
-
-with col_r4_right:
-    with chart_panel(t("mc.chart_pipeline"), height=460, subtitle=t("mc.chart_pipeline_sub")):
-        if filtered.empty:
-            st.info(t("mc.no_data_filter"))
-        else:
-            pipeline_order = ["Draft", "Submitted", "On Review", "Shortlisted", "Closed"]
-            progress_agg = (
-                filtered["progress"]
-                .value_counts()
-                .reindex(pipeline_order, fill_value=0)
-                .reset_index()
-            )
-            progress_agg.columns = ["stage", "count"]
-            fig = px.bar(
-                progress_agg, x="count", y="stage", orientation="h",
-                color="stage", color_discrete_map=PIPELINE_COLORS, text="count",
-            )
-            fig.update_traces(textposition="outside", showlegend=False)
-            apply_plotly_style(fig)
-            fig.update_layout(
-                yaxis=dict(
-                    categoryorder="array",
-                    categoryarray=list(reversed(pipeline_order)),
-                    title="",
-                ),
-                xaxis_title=t("mc.count"), height=400,
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-
-# -------------------------------------------------------------------------
-# ROW 5: Structural Breakdown (Placement, Working Arr, Durasi)
-# -------------------------------------------------------------------------
+# performance leaderboard: placement rate, rejection rate, ghosting rate per company
 section_divider()
 
 st.markdown(f'''
-    <h3 style='margin-bottom: 0.2rem;'>{t("mc.characteristics_title")}</h3>
-    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("mc.characteristics_sub")}</p>
+    <h3 style='margin-bottom: 0.2rem;'>{t("mc.performance_leaderboard_title")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("mc.performance_leaderboard_sub")}</p>
     <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
 ''', unsafe_allow_html=True)
 
-col_r5_1, col_r5_2, col_r5_3 = st.columns(3)
 
-with col_r5_1:
-    with chart_panel(t("mc.chart_type_dist"), height=460, subtitle=t("mc.chart_type_dist_sub")):
-        if filtered.empty:
-            st.info(t("mc.no_data_filter"))
-        else:
-            jenis_agg = filtered["jenis_penempatan"].value_counts().reset_index()
-            jenis_agg.columns = ["type", "count"]
-            fig = px.pie(
-                jenis_agg, names="type", values="count", hole=0.5,
-                color="type", color_discrete_map=JENIS_PENEMPATAN_COLORS,
-            )
-            fig.update_traces(
-                textinfo="label+percent", textposition="outside",
-                pull=[0.02] * len(jenis_agg),
-            )
-            apply_plotly_style(fig)
-            fig.update_layout(height=400, showlegend=False, margin=dict(t=30, b=30, l=10, r=10))
-            st.plotly_chart(fig, use_container_width=True)
-
-with col_r5_2:
-    with chart_panel(t("mc.chart_working_arr"), height=460, subtitle=t("mc.chart_working_arr_sub")):
-        if filtered.empty:
-            st.info(t("mc.no_data_filter"))
-        else:
-            wa_agg = filtered["working_arrangement"].value_counts().reset_index()
-            wa_agg.columns = ["arrangement", "count"]
-            wa_colors = {
-                "WFO": CHART_PALETTE[0],
-                "Hybrid": CHART_PALETTE[1],
-                "WFH": CHART_PALETTE[2],
-            }
-            fig = px.pie(
-                wa_agg, names="arrangement", values="count", hole=0.5,
-                color="arrangement", color_discrete_map=wa_colors,
-            )
-            fig.update_traces(
-                textinfo="label+percent", textposition="outside",
-                pull=[0.02] * len(wa_agg),
-            )
-            apply_plotly_style(fig)
-            fig.update_layout(height=400, showlegend=False, margin=dict(t=30, b=30, l=10, r=10))
-            st.plotly_chart(fig, use_container_width=True)
-
-with col_r5_3:
-    with chart_panel(t("mc.chart_duration"), height=460, subtitle=t("mc.chart_duration_sub")):
-        if filtered.empty:
-            st.info(t("mc.no_data_filter"))
-        else:
-            if "durasi" not in filtered.columns:
-                dur_map = dict(zip(df_tr["id_talent_req"], df_tr["durasi"]))
-                filtered["durasi"] = filtered["id_talent_req"].map(dur_map).fillna("Unknown")
-
-            durasi_agg = filtered["durasi"].value_counts().reset_index()
-            durasi_agg.columns = ["durasi", "count"]
-            
-            fig = px.pie(
-                durasi_agg, names="durasi", values="count", hole=0.5,
-                color_discrete_sequence=CHART_PALETTE,
-            )
-            fig.update_traces(
-                textinfo="label+percent", textposition="outside",
-                pull=[0.02] * len(durasi_agg),
-            )
-            apply_plotly_style(fig)
-            fig.update_layout(height=400, showlegend=False, margin=dict(t=30, b=30, l=10, r=10))
-            st.plotly_chart(fig, use_container_width=True)
-
-
-# -------------------------------------------------------------------------
-# ROW 6: Demand Characteristics (Fields & Tools)
-# -------------------------------------------------------------------------
-
-col_r6_left, col_r6_right = st.columns(2)
-
-with col_r6_left:
-    with chart_panel(t("mc.chart_prodi_demand"), height=460, subtitle=t("mc.chart_prodi_demand_sub")):
-        if filtered.empty:
-            st.info(t("mc.no_data_filter"))
-        else:
-            if "bidang_studi_dibutuhkan" not in filtered.columns:
-                prodi_map = dict(zip(df_tr["id_talent_req"], df_tr["bidang_studi_dibutuhkan"]))
-                filtered["bidang_studi_dibutuhkan"] = filtered["id_talent_req"].map(prodi_map).fillna("")
-
-            all_prodi = []
-            for val in filtered["bidang_studi_dibutuhkan"].dropna().astype(str):
-                all_prodi.extend([p.strip() for p in val.split(",") if p.strip()])
-                
-            if not all_prodi:
-                st.info(t("mc.no_data_filter"))
-            else:
-                prodi_df = pd.Series(all_prodi).value_counts().head(10).reset_index()
-                prodi_df.columns = ["Prodi", "Count"]
-                prodi_df = prodi_df.sort_values("Count", ascending=True)
-
-                fig = px.bar(
-                    prodi_df, x="Count", y="Prodi", orientation="h",
-                    text="Count", color="Count", color_continuous_scale=["#1D4044", "#3462ED"]
-                )
-                apply_plotly_style(fig)
-                fig.update_layout(height=400, margin=dict(t=10, l=10, r=20, b=0), xaxis_title="", yaxis_title="", coloraxis_showscale=False)
-                fig.update_traces(textposition="outside", cliponaxis=False)
-                st.plotly_chart(fig, use_container_width=True)
-
-with col_r6_right:
-    with chart_panel(t("mc.chart_tools_demand"), height=460, subtitle=t("mc.chart_tools_demand_sub")):
-        if filtered.empty:
-            st.info(t("mc.no_data_filter"))
-        else:
-            if "deskripsi_requirement" not in filtered.columns:
-                desc_map = dict(zip(df_tr["id_talent_req"], df_tr["deskripsi_requirement"]))
-                filtered["deskripsi_requirement"] = filtered["id_talent_req"].map(desc_map).fillna("")
-
-            # Get unique tools from status_student
-            df_student = load_csv_table("status_student")
-            all_student_tools = []
-            for tools_list in df_student["tools"].dropna().astype(str):
-                all_student_tools.extend([t.strip() for t in tools_list.split(",") if t.strip()])
-            unique_tools = set(all_student_tools)
-
-            tool_counts = {tool: 0 for tool in unique_tools}
-            
-            for desc in filtered["deskripsi_requirement"].dropna().astype(str):
-                desc_lower = desc.lower()
-                for tool in unique_tools:
-                    if tool.lower() in desc_lower:
-                        tool_counts[tool] += 1
-            
-            tools_df = pd.DataFrame(list(tool_counts.items()), columns=["Tool", "Count"])
-            tools_df = tools_df[tools_df["Count"] > 0]
-            
-            if tools_df.empty:
-                st.info(t("mc.no_data_filter"))
-            else:
-                tools_df = tools_df.sort_values("Count", ascending=False).head(10).sort_values("Count", ascending=True)
-                
-                fig = px.bar(
-                    tools_df, x="Count", y="Tool", orientation="h",
-                    text="Count", color="Count", color_continuous_scale=["#1D4044", "#3462ED"]
-                )
-                apply_plotly_style(fig)
-                fig.update_layout(height=400, margin=dict(t=10, l=10, r=20, b=0), xaxis_title="", yaxis_title="", coloraxis_showscale=False)
-                fig.update_traces(textposition="outside", cliponaxis=False)
-                st.plotly_chart(fig, use_container_width=True)
-
-section_divider()
-
-st.markdown(f'''
-    <h3 style='margin-bottom: 0.2rem;'>{t("mc.salary_analysis_title")}</h3>
-    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("mc.salary_analysis_sub")}</p>
-    <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
-''', unsafe_allow_html=True)
-
-col_r7_left, col_r7_right = st.columns(2)
-
-def extract_salary(val):
-    val = str(val).lower()
-    if "rp" not in val:
-        return pd.NA
-    import re
-    # extract digits, ignoring dots
-    digits = re.sub(r'[^0-9]', '', val)
-    if digits:
-        return float(digits)
-    return pd.NA
-
-# Compute salary series
-if "renumerasi" not in filtered.columns:
-    renum_map = dict(zip(df_tr["id_talent_req"], df_tr["renumerasi"]))
-    filtered["renumerasi"] = filtered["id_talent_req"].map(renum_map).fillna("Unknown")
-
-filtered["salary_num"] = filtered["renumerasi"].apply(extract_salary)
-paid_reqs = filtered.dropna(subset=["salary_num"])
-
-with col_r7_left:
-    with chart_panel(t("mc.chart_remuneration"), height=460, subtitle=t("mc.chart_remuneration_sub")):
-        if filtered.empty:
-            st.info(t("mc.no_data_filter"))
-        else:
-
-            def categorize_renum(val):
-                v = str(val).lower()
-                if "non-paid" in v or "tidak dibayar" in v:
-                    return "Non-Paid"
-                elif "transport" in v:
-                    return "Uang Transport"
-                elif "rp" in v:
-                    return "Paid"
-                return "Unknown"
-
-            filtered["renumerasi_cat"] = filtered["renumerasi"].apply(categorize_renum)
-            renum_agg = filtered[filtered["renumerasi_cat"] != "Unknown"]["renumerasi_cat"].value_counts().reset_index()
-            renum_agg.columns = ["type", "count"]
-            renum_agg = renum_agg.sort_values("count", ascending=True)
-            
-            fig = px.bar(
-                renum_agg, x="count", y="type", orientation="h",
-                text="count", color="count", color_continuous_scale=["#1D4044", "#3462ED"]
-            )
-            apply_plotly_style(fig)
-            fig.update_layout(height=400, margin=dict(t=10, l=10, r=20, b=0), xaxis_title="", yaxis_title="", coloraxis_showscale=False)
-            fig.update_traces(textposition="outside", cliponaxis=False)
-            st.plotly_chart(fig, use_container_width=True)
-
-with col_r7_right:
-    with chart_panel(t("mc.chart_salary_dist"), height=460, subtitle=t("mc.chart_salary_dist_sub")):
-        if paid_reqs.empty:
-            st.info(t("mc.no_data_filter"))
-        else:
-            fig = px.histogram(
-                paid_reqs, x="salary_num", nbins=10,
-                color_discrete_sequence=[CHART_PALETTE[1]]
-            )
-            apply_plotly_style(fig)
-            fig.update_layout(
-                xaxis_title="Remunerasi (Rp)", yaxis_title="Jumlah Request", height=400,
-                bargap=0.1
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-
-# -------------------------------------------------------------------------
-# ROW 8: Deep Dive into Average Salary
-# -------------------------------------------------------------------------
-
-with chart_panel(t("mc.chart_salary_avg"), height=460, subtitle=t("mc.chart_salary_avg_sub")):
-    if paid_reqs.empty:
-        st.info(t("mc.no_data_filter"))
+def _composite_impact(df_agg, count_col):
+    # compute impact score from volume and rate rankings, normalized 0-100
+    rate_col = f"{count_col} Rate (%)"
+    df_agg["_rank_vol"] = df_agg[count_col].rank(method="min", ascending=False)
+    df_agg["_rank_rate"] = df_agg[rate_col].rank(method="min", ascending=False)
+    df_agg["_comp"] = df_agg["_rank_vol"] + df_agg["_rank_rate"]
+    c_min, c_max = df_agg["_comp"].min(), df_agg["_comp"].max()
+    if c_max > c_min:
+        df_agg["Impact Score"] = 100 * (1 - (df_agg["_comp"] - c_min) / (c_max - c_min))
     else:
-        view_mode = st.radio("Kategori:", ["Program Studi", "Tools"], horizontal=True, label_visibility="collapsed")
-        
-        if view_mode == "Program Studi":
-            prodi_salaries = []
-            for _, row in paid_reqs.iterrows():
-                prodis = [p.strip() for p in str(row.get("bidang_studi_dibutuhkan", "")).split(",") if p.strip()]
-                sal = row["salary_num"]
-                for p in prodis:
-                    prodi_salaries.append({"Prodi": p, "Salary": sal})
-            
-            if prodi_salaries:
-                sal_df = pd.DataFrame(prodi_salaries)
-                sal_agg = sal_df.groupby("Prodi")["Salary"].mean().reset_index().sort_values("Salary", ascending=False).head(10).sort_values("Salary", ascending=True)
-                fig = px.bar(
-                    sal_agg, x="Salary", y="Prodi", orientation="h",
-                    text="Salary", color="Salary", color_continuous_scale=["#1D4044", "#3462ED"]
-                )
-                fig.update_traces(texttemplate='Rp %{text:,.0f}', textposition="outside")
-            else:
-                fig = None
-        else:
-            if "unique_tools" not in locals():
-                df_student = load_csv_table("status_student")
-                all_student_tools = []
-                for tools_list in df_student["tools"].dropna().astype(str):
-                    all_student_tools.extend([t.strip() for t in tools_list.split(",") if t.strip()])
-                unique_tools = set(all_student_tools)
-
-            tool_salaries = {tool: [] for tool in unique_tools}
-            for _, row in paid_reqs.iterrows():
-                desc_lower = str(row.get("deskripsi_requirement", "")).lower()
-                sal = row["salary_num"]
-                for tool in unique_tools:
-                    if tool.lower() in desc_lower:
-                        tool_salaries[tool].append(sal)
-            
-            avg_tools = []
-            for tool, sals in tool_salaries.items():
-                if sals:
-                    avg_tools.append({"Tool": tool, "Salary": sum(sals)/len(sals)})
-            
-            if avg_tools:
-                sal_df = pd.DataFrame(avg_tools)
-                sal_agg = sal_df.sort_values("Salary", ascending=False).head(10).sort_values("Salary", ascending=True)
-                fig = px.bar(
-                    sal_agg, x="Salary", y="Tool", orientation="h",
-                    text="Salary", color="Salary", color_continuous_scale=["#1D4044", "#3462ED"]
-                )
-                fig.update_traces(texttemplate='Rp %{text:,.0f}', textposition="outside")
-            else:
-                fig = None
-        
-        if fig:
-            apply_plotly_style(fig)
-            fig.update_layout(height=380, margin=dict(t=10, l=10, r=40, b=0), xaxis_title="", yaxis_title="", coloraxis_showscale=False)
-            fig.update_xaxes(showticklabels=False)
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info(t("mc.no_data_filter"))
+        df_agg["Impact Score"] = 100.0
+    return df_agg.drop(columns=["_rank_vol", "_rank_rate", "_comp"])
 
 
-# detail table
-section_divider()
+company_totals = df_ts.groupby("company").size().reset_index(name="Total")
 
-st.markdown(f'''
-    <h3 style='margin-bottom: 0.2rem;'>{t("mc.detail_title")}</h3>
-    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("mc.detail_title_sub")}</p>
-    <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
-''', unsafe_allow_html=True)
-
-with table_panel("", height=500):
-    search_term = st.text_input(
-        t("mc.search_label"), key="mc_search",
-        placeholder=t("mc.search_placeholder"),
-    )
-
-    placed_counts = df_ts[df_ts["progress_student"] == "Placement"].groupby("id_tracking_company").size()
-    
-    def calculate_priority(row):
-        req_date = pd.to_datetime(row.get("request_date"))
-        if pd.isna(req_date):
-            age_score = 0
-        else:
-            days_open = (pd.Timestamp.now() - req_date).days
-            days_open = max(0, days_open)
-            age_score = min(days_open / 30, 1.0) * 100
-
-        requested = float(row.get("jumlah_permintaan", 0))
-        if requested <= 0:
-            hc_gap_score = 0
-        else:
-            tc_id = row.get("id_tracking_company")
-            placed = placed_counts.get(tc_id, 0)
-            hc_gap_score = max(0, (requested - placed) / requested) * 100
-
-        progress = str(row.get("progress", "")).strip()
-        prog_map = {"Draft": 100, "Submitted": 80, "On Review": 60, "Shortlisted": 40, "Closed": 0}
-        prog_score = prog_map.get(progress, 0)
-
-        ptype = str(row.get("jenis_penempatan", "")).strip()
-        type_map = {"Full-time": 100, "Magang": 70, "Part-time": 50}
-        type_score = type_map.get(ptype, 0)
-
-        priority = (0.35 * age_score) + (0.30 * hc_gap_score) + (0.25 * prog_score) + (0.10 * type_score)
-        return round(priority, 1)
-
-    filtered["priority_score"] = filtered.apply(calculate_priority, axis=1)
-    
-    def get_priority_level(score):
-        if score >= 75: return "High"
-        if score >= 50: return "Medium"
-        return "Low"
-    
-    filtered["priority_level"] = filtered["priority_score"].apply(get_priority_level)
-
-    filtered["request_date"] = pd.to_datetime(filtered["request_date"], errors="coerce").dt.strftime('%d-%m-%Y')
-
-    filtered["hc_gap"] = filtered.apply(
-        lambda row: max(0, int(float(row.get("jumlah_permintaan", 0))) - int(float(row.get("jumlah_dikirimkan", 0)))), 
-        axis=1
-    )
-
-    display_cols = [
-        "nama_perusahaan", "posisi", "jenis_penempatan",
-        "jumlah_permintaan", "jumlah_dikirimkan", "hc_gap", "progress",
-        "request_date", "priority_score", "priority_level",
-    ]
-    available_cols = [c for c in display_cols if c in filtered.columns]
-    detail_df = filtered[available_cols].copy()
-    
-    detail_df = detail_df.sort_values("priority_score", ascending=False)
-
-    col_labels = {
-        "nama_perusahaan": "Company",
-        "posisi": "Position",
-        "jenis_penempatan": "Type",
-        "jumlah_permintaan": "Requested",
-        "jumlah_dikirimkan": "Sent",
-        "hc_gap": "Gap",
-        "progress": "Progress",
-        "request_date": "Request Date",
-        "priority_score": "Priority Score",
-        "priority_level": "Priority Level",
-    }
-    detail_df = detail_df.rename(columns=col_labels)
-
-    if search_term:
-        mask = detail_df.apply(
-            lambda row: search_term.lower() in str(row.values).lower(), axis=1
+# top 10 placement rate
+with chart_panel(t("mc.top10_placement"), height=460, subtitle=t("mc.top10_placement_sub")):
+    placed_candidates = df_ts[df_ts["progress_student"] == "Placement"]
+    if not placed_candidates.empty:
+        place_agg = placed_candidates.groupby("company").size().reset_index(name="Placement Count")
+        place_agg = place_agg.merge(company_totals, on="company")
+        place_agg["Placement Count Rate (%)"] = (place_agg["Placement Count"] / place_agg["Total"] * 100).round(1)
+        place_agg["custom_label"] = place_agg.apply(
+            lambda row: f"{int(row['Placement Count'])}/{int(row['Total'])} ({row['Placement Count Rate (%)']}%)", axis=1
         )
-        detail_df = detail_df[mask]
+        place_agg = _composite_impact(place_agg, "Placement Count")
+        top10 = place_agg.sort_values(["Impact Score"], ascending=[False]).head(10).sort_values("Impact Score", ascending=True)
 
-    def style_priority(val):
-        if val == "High":
-            return "background-color: #FEE2E2; color: #DC2626; font-weight: bold;"
-        elif val == "Medium":
-            return "background-color: #FEF3C7; color: #D97706; font-weight: bold;"
-        elif val == "Low":
-            return "background-color: #D1FAE5; color: #059669; font-weight: bold;"
-        return ""
-
-    if "Priority Level" in detail_df.columns:
-        styled_df = detail_df.style.map(style_priority, subset=["Priority Level"])
+        fig = px.bar(
+            top10, x="Impact Score", y="company", orientation="h",
+            color="Impact Score", color_continuous_scale=["#37A2B9", "#3462ED"],
+            text="custom_label"
+        )
+        fig.update_traces(textposition="outside", cliponaxis=False)
+        apply_plotly_style(fig)
+        fig.update_layout(
+            height=380, margin=dict(t=10, l=10, r=40, b=10),
+            xaxis_title=t("mp.impact_score_axis"),
+            yaxis=dict(title="", showticklabels=True),
+            coloraxis_showscale=False
+        )
+        fig.update_xaxes(range=[80, 108])
+        st.plotly_chart(fig, use_container_width=True)
     else:
-        styled_df = detail_df
+        st.info("No placement data available.")
 
-    st.dataframe(
-        styled_df, 
-        use_container_width=True, 
-        hide_index=True,
-        column_config={
-            "Priority Score": st.column_config.ProgressColumn(
-                "Priority Score", min_value=0, max_value=100, format="%.1f"
-            ),
-        }
+# top 10 rejection rate
+with chart_panel(t("mc.top10_rejection"), height=460, subtitle=t("mc.top10_rejection_sub")):
+    rejected_candidates = df_ts[df_ts["progress_student"] == "Rejected"]
+    if not rejected_candidates.empty:
+        rej_agg = rejected_candidates.groupby("company").size().reset_index(name="Rejection Count")
+        rej_agg = rej_agg.merge(company_totals, on="company")
+        rej_agg["Rejection Count Rate (%)"] = (rej_agg["Rejection Count"] / rej_agg["Total"] * 100).round(1)
+        rej_agg["custom_label"] = rej_agg.apply(
+            lambda row: f"{int(row['Rejection Count'])}/{int(row['Total'])} ({row['Rejection Count Rate (%)']}%)", axis=1
+        )
+        rej_agg = _composite_impact(rej_agg, "Rejection Count")
+        top10 = rej_agg.sort_values("Impact Score", ascending=False).head(10).sort_values("Impact Score", ascending=True)
+
+        fig = px.bar(
+            top10, x="Impact Score", y="company", orientation="h",
+            color="Impact Score", color_continuous_scale=["#37A2B9", "#EF4444"],
+            text="custom_label"
+        )
+        fig.update_traces(textposition="outside", cliponaxis=False)
+        apply_plotly_style(fig)
+        fig.update_layout(
+            height=380, margin=dict(t=10, l=10, r=40, b=10),
+            xaxis_title=t("mp.impact_score_axis"),
+            yaxis=dict(title="", showticklabels=True),
+            coloraxis_showscale=False
+        )
+        fig.update_xaxes(range=[80, 108])
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No rejection data available.")
+
+# top 10 ghosting rate per company
+with chart_panel(t("mc.top10_ghosting"), height=460, subtitle=t("mc.top10_ghosting_sub")):
+    reference_date = df_tc["send_date"].max()
+    df_ghost = metrics.get_ghosting_flags(
+        df_ts, tracking_company=df_tc, today=reference_date, include_healthy=False
     )
-    st.caption(t("mc.showing_records", shown=f"{len(detail_df):,}", total=f"{total_requests:,}"))
+    if not df_ghost.empty:
+        ghost_agg = df_ghost.groupby("company").size().reset_index(name="Ghosting Count")
+        ghost_agg = ghost_agg.merge(company_totals, on="company")
+        ghost_agg["Ghosting Count Rate (%)"] = (ghost_agg["Ghosting Count"] / ghost_agg["Total"] * 100).round(1)
+        ghost_agg["custom_label"] = ghost_agg.apply(
+            lambda row: f"{int(row['Ghosting Count'])}/{int(row['Total'])} ({row['Ghosting Count Rate (%)']}%)", axis=1
+        )
+        ghost_agg = _composite_impact(ghost_agg, "Ghosting Count")
+        top10 = ghost_agg.sort_values("Impact Score", ascending=False).head(10).sort_values("Impact Score", ascending=True)
+
+        fig = px.bar(
+            top10, x="Impact Score", y="company", orientation="h",
+            color_discrete_sequence=[COLORS["warning"]],
+            text="custom_label"
+        )
+        fig.update_traces(textposition="outside", cliponaxis=False)
+        apply_plotly_style(fig)
+        fig.update_layout(
+            height=380, margin=dict(t=10, l=10, r=40, b=10),
+            xaxis_title=t("mp.impact_score_axis"),
+            yaxis=dict(title="", showticklabels=True),
+        )
+        fig.update_xaxes(range=[0, 115])
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info(t("mp.no_ghosting_data"))
+
+# company directory table: one row per company with aggregated performance metrics
+section_divider()
+
+st.markdown(f'''
+    <h3 style='margin-bottom: 0.2rem;'>{t("mc.table_company_title")}</h3>
+    <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("mc.table_company_sub")}</p>
+    <hr style='width: 80%; margin-left: 0; margin-top: 0; margin-bottom: 1.5rem; border: none; border-bottom: 1px solid var(--border-color, #E2E8F0);'>
+''', unsafe_allow_html=True)
+
+# aggregate request metrics per company using the enriched data
+company_req = (
+    df_tc_enriched
+    .groupby(["id_company", "nama_perusahaan", "industri_sektor", "skala_perusahaan", "company_type", "kota"])
+    .agg(
+        total_permintaan=("jumlah_permintaan", "sum"),
+        total_dikirimkan=("jumlah_dikirimkan", "sum"),
+        jumlah_request=("id_tracking_company", "count"),
+    )
+    .reset_index()
+)
+
+# placement count per company from tracking_student
+placed_per_company = (
+    df_ts[df_ts["progress_student"] == "Placement"]
+    .groupby("company").size().reset_index(name="total_placement")
+)
+
+# ghosting count per company
+reference_date_tbl = df_tc["send_date"].max()
+df_ghost_tbl = metrics.get_ghosting_flags(
+    df_ts, tracking_company=df_tc, today=reference_date_tbl, include_healthy=False
+)
+ghost_per_company = (
+    df_ghost_tbl.groupby("company").size().reset_index(name="total_ghosting")
+    if not df_ghost_tbl.empty
+    else pd.DataFrame(columns=["company", "total_ghosting"])
+)
+
+# merge all into one table
+company_tbl = company_req.copy()
+company_tbl = company_tbl.merge(
+    placed_per_company, left_on="nama_perusahaan", right_on="company", how="left"
+).drop(columns=["company"], errors="ignore")
+company_tbl = company_tbl.merge(
+    ghost_per_company, left_on="nama_perusahaan", right_on="company", how="left"
+).drop(columns=["company"], errors="ignore")
+
+company_tbl["total_placement"] = company_tbl["total_placement"].fillna(0).astype(int)
+company_tbl["total_ghosting"] = company_tbl["total_ghosting"].fillna(0).astype(int)
+company_tbl["fulfillment_pct"] = company_tbl.apply(
+    lambda r: round(r["total_placement"] / r["total_dikirimkan"] * 100, 1)
+    if r["total_dikirimkan"] > 0 else 0.0,
+    axis=1,
+)
+
+with filter_bar():
+    search_q = st.text_input(
+        t("mc.search_company"), "", key="mc_table_search",
+        placeholder=t("mc.search_company_placeholder"),
+    )
+
+tbl_view = company_tbl.copy()
+if search_q:
+    q = search_q.lower()
+    tbl_view = tbl_view[
+        tbl_view["nama_perusahaan"].str.lower().str.contains(q, na=False) |
+        tbl_view["industri_sektor"].str.lower().str.contains(q, na=False) |
+        tbl_view["kota"].str.lower().str.contains(q, na=False)
+    ]
+
+tbl_view = tbl_view.sort_values("total_placement", ascending=False).reset_index(drop=True)
+
+display_cols = [
+    "nama_perusahaan", "industri_sektor", "skala_perusahaan", "company_type", "kota",
+    "jumlah_request", "total_permintaan", "total_dikirimkan", "total_placement",
+    "total_ghosting", "fulfillment_pct",
+]
+
+st.caption(t("mc.table_showing").format(shown=len(tbl_view), total=len(company_tbl)))
+
+st.dataframe(
+    tbl_view[display_cols],
+    use_container_width=True,
+    hide_index=True,
+    column_config={
+        "nama_perusahaan":    st.column_config.TextColumn(t("mc.col_company_name"), width="large"),
+        "industri_sektor":    st.column_config.TextColumn(t("mc.col_industry")),
+        "skala_perusahaan":   st.column_config.TextColumn(t("mc.col_scale")),
+        "company_type":       st.column_config.TextColumn(t("mc.col_type")),
+        "kota":               st.column_config.TextColumn(t("mc.col_city")),
+        "jumlah_request":     st.column_config.NumberColumn(t("mc.col_requests"), format="%d"),
+        "total_permintaan":   st.column_config.NumberColumn(t("mc.col_headcount"), format="%d"),
+        "total_dikirimkan":   st.column_config.NumberColumn(t("mc.col_sent"), format="%d"),
+        "total_placement":    st.column_config.NumberColumn(t("mc.col_placement"), format="%d"),
+        "total_ghosting":     st.column_config.NumberColumn(t("mc.col_ghosting"), format="%d"),
+        "fulfillment_pct":    st.column_config.NumberColumn(t("mc.col_fulfillment"), format="%.1f%%"),
+    },
+)
+

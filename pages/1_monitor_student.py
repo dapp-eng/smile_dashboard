@@ -36,7 +36,7 @@ metric_strip([
 
 section_divider()
 
-# bt-00: student profiling section
+# student profiling section
 st.markdown(f'''
     <h3 style='margin-bottom: 0.2rem;'>{t("ms.profiling_section")}</h3>
     <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("ms.profiling_caption")}</p>
@@ -45,7 +45,7 @@ st.markdown(f'''
 
 df_prof = queries.get_student_profiling_data()
 
-# Row 1: Field of Interest (Treemap) | Placement Preference (Donut)
+# field of interest treemap and placement preference donut
 c_prof_1, c_prof_2 = card_grid(2)
 with c_prof_1:
     with chart_panel(t("ms.chart_interest"), subtitle=t("ms.chart_interest_sub"), height=420):
@@ -81,7 +81,7 @@ with c_prof_2:
 
 st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
 
-# Row 2: Study Program Distribution (Bar) | Popular Tools (Bar)
+# study program distribution and popular tools
 c_prof_3, c_prof_4 = card_grid(2)
 with c_prof_3:
     with chart_panel(t("ms.chart_prodi_dist"), subtitle=t("ms.chart_prodi_dist_sub"), height=420):
@@ -124,7 +124,7 @@ with c_prof_4:
 
 section_divider()
 
-# bt-06: eligibility section
+# eligibility section
 st.markdown(f'''
     <h3 style='margin-bottom: 0.2rem;'>{t("ms.eligibility_title")}</h3>
     <p style='font-size: 12px; color: var(--text-color); opacity: 0.65; margin-top: -0.2rem; margin-bottom: 0.5rem;'>{t("ms.eligibility_caption")} (BT-06)</p>
@@ -255,7 +255,7 @@ with table_panel(t("ms.detail_title"), height=430, subtitle=t("ms.detail_title_s
         },
     )
 
-# bt-01: talent matching section
+# talent matching section
 section_divider()
 st.markdown(f'''
     <h3 style='margin-bottom: 0.2rem;'>{t("ms.matching_title")}</h3>

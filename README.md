@@ -42,12 +42,18 @@ Sistem ini memetakan dan mengimplementasikan seluruh kebutuhan bisnis **BT-01 hi
    - Visualisasi dampak deteksi sistem (Sunburst) dan Top 10 Perusahaan berdasarkan dampak ghosting.
    - Master Table Mahasiswa (Individual Student Tracker) dengan filter interaktif dan drill-down detail histori aplikasi lengkap.
 
-5. **Data Quality (BT-08)**
+5. **Monitor Request (BT-03 Request Analytics)**
+   - Analisis karakteristik permintaan talent (distribusi jenis penempatan, working arrangement, durasi, dan sumber form).
+   - Analisis kebutuhan spesifik pasar (demam prodi & tools yang paling banyak diminta).
+   - Analisis remunerasi/gaji (kategori paid/non-paid, distribusi nominal gaji, dan rata-rata gaji per prodi/tools).
+   - Matriks prioritas penanganan permintaan talent (scoring prioritas berdasarkan umur request, headcount gap, status progress, dan jenis penempatan).
+
+6. **Data Quality (BT-08)**
    - Analisis tingkat keusangan data (*Safe*, *Stale*, *Critical*) berdasarkan tanggal sinkronisasi terakhir.
    - Reklasifikasi status 'Finish' secara otomatis menggunakan kolom `rejection` untuk mengungkap hasil aktual kandidat (Placement, Ghosting, Rejected, Unresolved).
    - Deteksi ketidakcocokan field (Nama, Email, Semester, Phone, Prodi) antara dataset `STUDENT ALL` dan `STATUS STUDENT`.
 
-6. **Pengoperasian Mode Tampilan & Multi-Bahasa**
+7. **Pengoperasian Mode Tampilan & Multi-Bahasa**
    - **Switch Mode (Light / Dark)**: Penyesuaian tema visual otomatis.
    - **Multi-Language (ID / EN)**: Dukungan Bahasa Indonesia dan Bahasa Inggris untuk seluruh label, metrik, dan judul section.
 
@@ -69,7 +75,8 @@ SSDC_SMILE/
 │   ├── 1_monitor_student.py # Halaman Monitor Mahasiswa (BT-06 & BT-01)
 │   ├── 2_monitor_company.py # Halaman Monitor Perusahaan (BT-03 & BT-04)
 │   ├── 3_monitor_process.py # Halaman Monitor Proses (BT-02 & BT-05)
-│   └── 4_data_quality.py    # Halaman Data Quality (BT-08)
+│   ├── 4_data_quality.py    # Halaman Kualitas Data (BT-08)
+│   └── 5_monitor_request.py # Halaman Monitor Request (BT-03 Request Analytics)
 ├── utils/
 │   ├── charts.py            # Utility pembentuk chart Plotly
 │   ├── data_loader.py       # Pemuat data CSV & integrasi client Supabase
@@ -79,7 +86,8 @@ SSDC_SMILE/
 │   ├── pdf_report.py        # Generator laporan periodik berbasis PDF (fpdf2 & Matplotlib)
 │   ├── queries.py           # Interface pembacaan query data
 │   ├── supabase_client.py   # Client Supabase untuk operasi live CRUD
-│   └── theme.py             # Palette warna dan styling Plotly
+│   ├── theme.py             # Palette warna dan styling Plotly
+│   └── validator.py         # Utility validasi input data
 ├── .gitignore
 ├── app.py                   # Entry point aplikasi & Halaman Overview (BT-07)
 ├── requirements.txt         # Daftar pustaka dependency Python

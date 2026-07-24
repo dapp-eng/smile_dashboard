@@ -1,3 +1,5 @@
+# data validation helpers for student and talent request inputs
+
 def validate_talent_request(data: dict) -> list[str]:
     errors = []
     if not data.get("nama_posisi"):

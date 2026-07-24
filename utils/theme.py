@@ -173,13 +173,43 @@ def apply_plotly_style(fig):
         zerolinecolor="rgba(128,128,128,0.2)",
     )
 
+    # Dark-background chart types that always need white text labels inside them
+    _ALWAYS_WHITE_INSIDE = ("treemap", "sunburst", "funnel")
+    _SINGLE_COLOR_DARK = {"#3462ED", "#4748B0", "#1E3A8A", "#2D3B87", "#6366F1", "#4F46E5", "#121F45"}
+
     for trace in fig.data:
-        if hasattr(trace, "textfont"):
-            trace.update(textfont=dict(color=font_color))
-        if trace.type == "sankey":
+        if trace.type in _ALWAYS_WHITE_INSIDE:
+            # treemap/sunburst: labels inside colored tiles should always be white
+            trace.update(textfont=dict(color="#FFFFFF", family="Inter, sans-serif"))
+        elif trace.type == "sankey":
             if hasattr(trace, "node") and isinstance(trace.node, dict):
                 trace.node["font"] = dict(color=font_color, family="Inter, sans-serif", size=12)
+        elif trace.type in ("bar", "waterfall"):
+            # For bars: if bar color is a dark palette color, text inside is white;
+            # if text is outside (axis-side), use theme font color.
+            trace_color = None
+            if hasattr(trace, "marker") and trace.marker:
+                mc = trace.marker.color
+                if isinstance(mc, str):
+                    trace_color = mc.upper()
+
+            # Check if this trace uses a known-dark solid color
+            is_dark_solid = trace_color and trace_color in {c.upper() for c in _SINGLE_COLOR_DARK}
+
+            if hasattr(trace, "textfont"):
+                # Only override inside-bar text; outside labels keep theme color
+                text_pos = getattr(trace, "textposition", None)
+                if isinstance(text_pos, str) and "inside" in text_pos:
+                    trace.update(textfont=dict(color="#FFFFFF"))
+                elif is_dark_solid and isinstance(text_pos, str) and text_pos in ("auto", ""):
+                    trace.update(textfont=dict(color="#FFFFFF"))
+                else:
+                    trace.update(textfont=dict(color=font_color))
+            if trace.type not in ("pie", "sunburst", "funnel", "waterfall", "sankey", "treemap"):
+                trace.update(cliponaxis=False)
         elif trace.type not in ("pie", "sunburst", "funnel", "waterfall", "sankey", "treemap"):
+            if hasattr(trace, "textfont"):
+                trace.update(textfont=dict(color=font_color))
             trace.update(cliponaxis=False)
 
     return fig

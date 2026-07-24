@@ -1,7 +1,8 @@
-# pdf report generator for periodic placement reports (bt-07)
+# pdf report generator for periodic placement reports (bt-07 dominant)
 
 import io
 import os
+import re
 import tempfile
 from datetime import datetime
 
@@ -52,15 +53,99 @@ def _plt_to_bytes(fig) -> bytes:
     return buf.getvalue()
 
 
-# pie chart placement distribution by jenis penempatan
-def _build_placement_by_type_chart(df_tc, df_ts):
-    placed = df_ts[df_ts["progress_student"] == "Placement"] if "progress_student" in df_ts.columns else df_ts
+# shared chart style helper
+def _style_ax(ax):
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("#CCCCCC")
+    ax.spines["bottom"].set_color("#CCCCCC")
+    ax.grid(axis="x", linestyle="--", alpha=0.3)
+    ax.tick_params(labelsize=8)
+
+
+# BT-07 chart: placement per semester
+def _build_bt07_by_semester(df_ts, df_status_student):
+    student_info = df_status_student[["NIM", "semester"]].drop_duplicates()
+    placed = df_ts[df_ts["progress_student"] == "Placement"].copy()
+    merged = placed.merge(student_info, on="NIM", how="left")
+    merged["semester"] = merged["semester"].astype(str)
+    counts = merged["semester"].value_counts().sort_index()
+
+    fig, ax = plt.subplots(figsize=(7, 2.8), dpi=200)
+    bars = ax.bar(counts.index, counts.values, color="#3462ED", width=0.55, edgecolor="white")
+    _style_ax(ax)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    ax.grid(axis="x", visible=False)
+    for bar in bars:
+        ax.text(
+            bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.1,
+            f"{int(bar.get_height())}", ha="center", va="bottom", fontsize=8, fontweight="bold", color="#1E293B"
+        )
+    ax.set_xlabel("Semester", fontsize=9)
+    ax.set_ylabel("Jumlah Placement", fontsize=9)
+    plt.tight_layout()
+    return fig
+
+
+# BT-07 chart: placement per program studi
+def _build_bt07_by_prodi(df_ts, df_status_student):
+    student_info = df_status_student[["NIM", "program_studi"]].drop_duplicates()
+    placed = df_ts[df_ts["progress_student"] == "Placement"].copy()
+    merged = placed.merge(student_info, on="NIM", how="left")
+    counts = merged["program_studi"].value_counts().head(10).sort_values(ascending=True)
+
+    if counts.empty:
+        counts = pd.Series({"Data Tidak Tersedia": 0})
+
+    fig, ax = plt.subplots(figsize=(7, 3.2), dpi=200)
+    bars = ax.barh(counts.index, counts.values, color="#3462ED", height=0.6, edgecolor="white")
+    _style_ax(ax)
+    max_val = max(1, counts.max())
+    for bar in bars:
+        w = bar.get_width()
+        ax.text(
+            w + max(0.1, max_val * 0.02), bar.get_y() + bar.get_height() / 2,
+            f"{int(w)}", va="center", ha="left", fontsize=8, fontweight="bold", color="#1E293B"
+        )
+    ax.set_xlabel("Jumlah Placement", fontsize=9)
+    ax.set_xlim(0, max_val * 1.25)
+    plt.tight_layout()
+    return fig
+
+
+# BT-07 chart: placement per perusahaan (top 10)
+def _build_bt07_by_company(df_ts, top_n=10):
+    placed = df_ts[df_ts["progress_student"] == "Placement"].copy()
+    if "company" in placed.columns and not placed["company"].dropna().empty:
+        counts = placed.groupby("company").size().nlargest(top_n).sort_values(ascending=True)
+    else:
+        counts = pd.Series({"Data Tidak Tersedia": 0})
+
+    fig, ax = plt.subplots(figsize=(7, 3.2), dpi=200)
+    bars = ax.barh(counts.index, counts.values, color="#4748B0", height=0.6, edgecolor="white")
+    _style_ax(ax)
+    max_val = max(1, counts.max())
+    for bar in bars:
+        w = bar.get_width()
+        ax.text(
+            w + max(0.1, max_val * 0.02), bar.get_y() + bar.get_height() / 2,
+            f"{int(w)}", va="center", ha="left", fontsize=8, fontweight="bold", color="#1E293B"
+        )
+    ax.set_xlabel("Jumlah Placement", fontsize=9)
+    ax.set_xlim(0, max_val * 1.25)
+    plt.tight_layout()
+    return fig
+
+
+# BT-07 chart: placement per jenis penempatan
+def _build_bt07_by_type(df_tc, df_ts):
+    placed = df_ts[df_ts["progress_student"] == "Placement"].copy()
     if "jenis_penempatan" in placed.columns and not placed["jenis_penempatan"].dropna().empty:
         counts = placed["jenis_penempatan"].value_counts()
-    elif "id_tracking_company" in placed.columns and "id_tracking_company" in df_tc.columns and "jenis_penempatan" in df_tc.columns:
+    elif "id_tracking_company" in placed.columns and "jenis_penempatan" in df_tc.columns:
         merged = placed.merge(df_tc[["id_tracking_company", "jenis_penempatan"]], on="id_tracking_company", how="left")
         counts = merged["jenis_penempatan"].value_counts()
-    elif "jenis_penempatan" in df_tc.columns and not df_tc["jenis_penempatan"].dropna().empty:
+    elif "jenis_penempatan" in df_tc.columns:
         counts = df_tc["jenis_penempatan"].value_counts()
     else:
         counts = pd.Series({"Magang": 1, "Full-time": 1, "Part-time": 1})
@@ -71,15 +156,27 @@ def _build_placement_by_type_chart(df_tc, df_ts):
 
     wedges, texts, autotexts = ax.pie(
         counts.values, labels=counts.index, autopct="%1.1f%%", startangle=90,
-        colors=colors, wedgeprops=dict(width=0.45, edgecolor="white", linewidth=2),
-        textprops=dict(fontsize=8, color="#1E293B")
+        colors=colors, wedgeprops=dict(width=0.55, edgecolor="white", linewidth=2),
+        textprops=dict(fontsize=9, color="#1E293B")
     )
     for at in autotexts:
-        at.set_fontsize(8)
+        at.set_fontsize(9)
         at.set_weight("bold")
+        at.set_color("#FFFFFF")
     ax.axis("equal")
     plt.tight_layout()
-    return fig
+    return fig, counts
+
+
+# BT-07: rekap table per jenis penempatan
+def _build_bt07_rekap_table(df_tc, df_ts, df_status_student):
+    placed = df_ts[df_ts["progress_student"] == "Placement"].copy()
+    student_info = df_status_student[["NIM", "program_studi", "semester"]].drop_duplicates()
+    merged = placed.merge(student_info, on="NIM", how="left")
+    if "jenis_penempatan" not in merged.columns:
+        tc_info = df_tc[["id_tracking_company", "jenis_penempatan"]].drop_duplicates()
+        merged = merged.merge(tc_info, on="id_tracking_company", how="left")
+    return merged
 
 
 # area chart monthly request volume
@@ -99,86 +196,19 @@ def _build_monthly_request_trend(df_tc):
         x_labels = [datetime.now().strftime("%Y-%m")]
         y_values = [0]
 
-    fig, ax = plt.subplots(figsize=(5.5, 2.2), dpi=200)
+    fig, ax = plt.subplots(figsize=(7, 2.2), dpi=200)
     ax.plot(x_labels, y_values, marker="o", color="#3462ED", linewidth=2, markersize=4)
     ax.fill_between(x_labels, y_values, color="#3462ED", alpha=0.12)
+    _style_ax(ax)
     ax.grid(axis="y", linestyle="--", alpha=0.3)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color("#CCCCCC")
-    ax.spines["bottom"].set_color("#CCCCCC")
+    ax.grid(axis="x", visible=False)
     plt.xticks(rotation=25, ha="right", fontsize=8)
     plt.yticks(fontsize=8)
     plt.tight_layout()
     return fig
 
 
-# horizontal bar top companies by placement count
-def _build_top_companies_chart(df_tc, df_ts, top_n: int = 10):
-    if "progress_student" in df_ts.columns and "company" in df_ts.columns:
-        placed = df_ts[df_ts["progress_student"] == "Placement"]
-        if not placed.empty:
-            counts = placed.groupby("company").size().nlargest(top_n).sort_values(ascending=True)
-        else:
-            counts = pd.Series({"Data Tidak Tersedia": 0})
-    elif "nama_perusahaan" in df_tc.columns:
-        counts = df_tc["nama_perusahaan"].value_counts().head(top_n).sort_values(ascending=True)
-    else:
-        counts = pd.Series({"Data Tidak Tersedia": 0})
-
-    fig, ax = plt.subplots(figsize=(5.5, 2.4), dpi=200)
-    bars = ax.barh(counts.index, counts.values, color="#3462ED", height=0.6)
-    ax.grid(axis="x", linestyle="--", alpha=0.3)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color("#CCCCCC")
-    ax.spines["bottom"].set_color("#CCCCCC")
-
-    max_val = max(1, counts.max())
-    for bar in bars:
-        w = bar.get_width()
-        ax.text(w + max(0.1, max_val * 0.02), bar.get_y() + bar.get_height() / 2, f"{int(w)}",
-                va="center", ha="left", fontsize=8, fontweight="bold", color="#1E293B")
-
-    plt.xticks(fontsize=8)
-    plt.yticks(fontsize=8)
-    plt.tight_layout()
-    return fig
-
-
-# horizontal bar placement count by program studi
-def _build_placement_by_prodi_chart(df_ts, df_student_status):
-    if "progress_student" in df_ts.columns and "NIM" in df_ts.columns and "program_studi" in df_student_status.columns:
-        placed = df_ts[df_ts["progress_student"] == "Placement"]
-        merged = placed.merge(
-            df_student_status[["NIM", "program_studi"]].drop_duplicates(),
-            on="NIM", how="left"
-        )
-        counts = merged["program_studi"].value_counts().head(10).sort_values(ascending=True)
-    else:
-        counts = pd.Series({"Data Tidak Tersedia": 0})
-
-    fig, ax = plt.subplots(figsize=(5.5, 2.4), dpi=200)
-    bars = ax.barh(counts.index, counts.values, color="#4748B0", height=0.6)
-    ax.grid(axis="x", linestyle="--", alpha=0.3)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color("#CCCCCC")
-    ax.spines["bottom"].set_color("#CCCCCC")
-
-    max_val = max(1, counts.max())
-    for bar in bars:
-        w = bar.get_width()
-        ax.text(w + max(0.1, max_val * 0.02), bar.get_y() + bar.get_height() / 2, f"{int(w)}",
-                va="center", ha="left", fontsize=8, fontweight="bold", color="#1E293B")
-
-    plt.xticks(fontsize=8)
-    plt.yticks(fontsize=8)
-    plt.tight_layout()
-    return fig
-
-
-# donut eligible vs ineligible students
+# eligibility donut
 def _build_eligibility_pie(df_eligibility):
     if "is_eligible" in df_eligibility.columns and not df_eligibility.empty:
         comp = df_eligibility["is_eligible"].map({True: "Eligible", False: "Ineligible"}).value_counts()
@@ -186,14 +216,13 @@ def _build_eligibility_pie(df_eligibility):
         comp = pd.Series({"Eligible": 0, "Ineligible": 0})
 
     fig, ax = plt.subplots(figsize=(4.5, 2.2), dpi=200)
-    colors = ["#10B981", "#EF4444"]
-    labels = comp.index.tolist()
+    colors = ["#10B981", "#CBD5E1"]
     values = comp.values.tolist()
     if sum(values) == 0:
         values = [1, 0]
 
     wedges, texts, autotexts = ax.pie(
-        values, labels=labels, autopct="%1.1f%%", startangle=90,
+        values, labels=comp.index.tolist(), autopct="%1.1f%%", startangle=90,
         colors=colors[:len(values)], wedgeprops=dict(width=0.45, edgecolor="white", linewidth=2),
         textprops=dict(fontsize=8, color="#1E293B")
     )
@@ -205,34 +234,29 @@ def _build_eligibility_pie(df_eligibility):
     return fig
 
 
-# horizontal bar selection stage distribution
+# stage distribution horizontal bar
 def _build_stage_distribution(df_track):
     if "progress_student" in df_track.columns and not df_track.empty:
         counts = df_track["progress_student"].value_counts().sort_values(ascending=True)
     else:
         counts = pd.Series({"Placement": 0})
 
-    fig, ax = plt.subplots(figsize=(5.5, 2.4), dpi=200)
-    bars = ax.barh(counts.index, counts.values, color="#3462ED", height=0.6)
-    ax.grid(axis="x", linestyle="--", alpha=0.3)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color("#CCCCCC")
-    ax.spines["bottom"].set_color("#CCCCCC")
-
+    fig, ax = plt.subplots(figsize=(7, 2.4), dpi=200)
+    bars = ax.barh(counts.index, counts.values, color="#3462ED", height=0.6, edgecolor="white")
+    _style_ax(ax)
     max_val = max(1, counts.max())
     for bar in bars:
         w = bar.get_width()
-        ax.text(w + max(0.1, max_val * 0.02), bar.get_y() + bar.get_height() / 2, f"{int(w)}",
-                va="center", ha="left", fontsize=8, fontweight="bold", color="#1E293B")
-
-    plt.xticks(fontsize=8)
-    plt.yticks(fontsize=8)
+        ax.text(
+            w + max(0.1, max_val * 0.02), bar.get_y() + bar.get_height() / 2,
+            f"{int(w)}", va="center", ha="left", fontsize=8, fontweight="bold", color="#1E293B"
+        )
+    ax.set_xlim(0, max_val * 1.25)
     plt.tight_layout()
     return fig
 
 
-# donut ghosting proportion
+# ghosting donut
 def _build_ghosting_pie(active_count, fu_count, ghost_count):
     healthy = max(0, active_count - fu_count - ghost_count)
     labels = ["Healthy", "FU 1-3", "Ghosting"]
@@ -256,7 +280,7 @@ def _build_ghosting_pie(active_count, fu_count, ghost_count):
     return fig
 
 
-# donut data staleness distribution
+# data staleness donut
 def _build_staleness_pie(df_master):
     if "staleness" in df_master.columns and not df_master.empty:
         counts = df_master["staleness"].value_counts()
@@ -280,7 +304,7 @@ def _build_staleness_pie(df_master):
     return fig
 
 
-# generate a comprehensive periodic report pdf returning bytes for download
+# generate a comprehensive periodic report pdf with BT-07 as dominant section
 def generate_report_pdf(
     df_student_eligibility: pd.DataFrame,
     df_company: pd.DataFrame,
@@ -365,7 +389,8 @@ def generate_report_pdf(
         pdf.multi_cell(0, 6, text)
         pdf.ln(3)
 
-    def add_chart_image(fig, caption: str = "", width_mm: float = 110):
+    def add_chart_image(fig, caption: str = "", width_mm: float = 140):
+        tmp_path = None
         try:
             img_bytes = _plt_to_bytes(fig)
             with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
@@ -385,18 +410,22 @@ def generate_report_pdf(
                 pdf.set_text_color(0, 0, 0)
                 pdf.cell(0, 5, caption, align="C", ln=1)
                 pdf.ln(3)
-            os.unlink(tmp_path)
         except Exception:
-            add_body_text(f"[Chart: {caption}]")
-            pdf.ln(2)
-            if caption:
-                pdf.set_font("TNR", "I", 9)
-                pdf.set_text_color(0, 0, 0)
-                pdf.cell(0, 5, caption, align="C", ln=1)
-                pdf.ln(3)
-            os.unlink(tmp_path)
-        except Exception:
-            add_body_text(f"[Chart: {caption}]")
+            add_body_text(f"[Grafik: {caption}]")
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+
+    def add_kpi_row(label: str, value: str):
+        col_w = (pdf.w - pdf.l_margin - pdf.r_margin) / 2
+        pdf.set_font("TNR", "", 11)
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(col_w, 7, f"  {label}", border="TB", ln=0)
+        pdf.set_font("TNR", "B", 11)
+        pdf.cell(col_w, 7, value, border="TB", align="R", ln=1)
 
     # cover page
     pdf.add_page()
@@ -417,7 +446,7 @@ def generate_report_pdf(
     gen_label = "Dibuat pada" if is_id else "Generated on"
     pdf.cell(0, 8, f"{gen_label}: {date_str}", align="C", ln=1)
 
-    # main summary
+    # section 1: ringkasan utama
     pdf.add_page()
     section_title = "Ringkasan Utama" if is_id else "Main Summary"
     add_section_title(section_title)
@@ -431,110 +460,183 @@ def generate_report_pdf(
     total_sent = int(df_tc["jumlah_dikirimkan"].sum()) if "jumlah_dikirimkan" in df_tc.columns else (int(df_tc["jumlah_dikirim"].sum()) if "jumlah_dikirim" in df_tc.columns else 0)
     fulfillment_rate = round(total_placement / total_sent * 100, 1) if total_sent > 0 else 0
 
-    if is_id:
-        summary = (
-            f"Laporan ini mencakup seluruh aktivitas placement mahasiswa yang tercatat dalam sistem SMILE. "
-            f"Dari total {total_students:,} mahasiswa yang terdaftar, sebanyak {eligible_count:,} mahasiswa "
-            f"({eligible_pct}%) dinyatakan eligible untuk dikirimkan ke perusahaan. "
-            f"Sistem mencatat {total_companies:,} perusahaan mitra aktif dengan total {total_requests:,} permintaan talent. "
-            f"Sebanyak {total_placement:,} mahasiswa berhasil ditempatkan dari {total_sent:,} kandidat yang dikirimkan, "
-            f"menghasilkan tingkat pemenuhan sebesar {fulfillment_rate}%."
-        )
-    else:
-        summary = (
-            f"This report covers all student placement activities recorded in the SMILE system. "
-            f"Out of {total_students:,} registered students, {eligible_count:,} ({eligible_pct}%) "
-            f"are eligible for company placement. "
-            f"The system records {total_companies:,} active partner companies with {total_requests:,} talent requests. "
-            f"A total of {total_placement:,} students were successfully placed from {total_sent:,} submitted candidates, "
-            f"yielding a fulfillment rate of {fulfillment_rate}%."
-        )
-    add_body_text(summary)
+    summary_text = (
+        f"Laporan ini menyajikan rekapitulasi menyeluruh aktivitas placement mahasiswa yang tercatat dalam "
+        f"sistem SMILE pada periode yang dilaporan. Dari total {total_students:,} mahasiswa terdaftar, "
+        f"sebanyak {eligible_count:,} mahasiswa ({eligible_pct}%) memenuhi kriteria kelayakan untuk dikirimkan "
+        f"ke perusahaan mitra. Sistem mencatat {total_companies:,} perusahaan aktif dengan {total_requests:,} "
+        f"permintaan talent, dari mana {total_sent:,} kandidat telah dikirimkan dan {total_placement:,} mahasiswa "
+        f"berhasil ditempatkan, menghasilkan tingkat pemenuhan sebesar {fulfillment_rate}%."
+        if is_id else
+        f"This report presents a comprehensive recapitulation of student placement activities recorded in the SMILE "
+        f"system. Out of {total_students:,} registered students, {eligible_count:,} ({eligible_pct}%) meet the "
+        f"eligibility criteria for company submission. The system records {total_companies:,} active companies with "
+        f"{total_requests:,} talent requests, of which {total_sent:,} candidates were submitted and "
+        f"{total_placement:,} students were successfully placed, yielding a fulfillment rate of {fulfillment_rate}%."
+    )
+    add_body_text(summary_text)
 
-    pdf.set_font("TNR", "B", 11)
-    pdf.set_draw_color(0, 0, 0)
     kpi_data = [
         ("Total Mahasiswa" if is_id else "Total Students", f"{total_students:,}"),
-        ("Eligible", f"{eligible_count:,} ({eligible_pct}%)"),
-        ("Total Perusahaan" if is_id else "Total Companies", f"{total_companies:,}"),
-        ("Total Permintaan" if is_id else "Total Requests", f"{total_requests:,}"),
-        ("Total Placement", f"{total_placement:,}"),
+        ("Mahasiswa Eligible" if is_id else "Eligible Students", f"{eligible_count:,} ({eligible_pct}%)"),
+        ("Total Perusahaan Mitra" if is_id else "Partner Companies", f"{total_companies:,}"),
+        ("Total Permintaan Talent" if is_id else "Talent Requests", f"{total_requests:,}"),
+        ("Total Kandidat Dikirim" if is_id else "Candidates Submitted", f"{total_sent:,}"),
+        ("Total Placement" if is_id else "Total Placements", f"{total_placement:,}"),
         ("Tingkat Pemenuhan" if is_id else "Fulfillment Rate", f"{fulfillment_rate}%"),
     ]
-    col_w = (pdf.w - pdf.l_margin - pdf.r_margin) / 2
+    pdf.ln(3)
     for label, val in kpi_data:
-        pdf.set_font("TNR", "", 11)
-        pdf.set_text_color(0, 0, 0)
-        pdf.cell(col_w, 7, f"  {label}", border="TB", ln=0)
-        pdf.set_font("TNR", "B", 11)
-        pdf.cell(col_w, 7, val, border="TB", align="R", ln=1)
+        add_kpi_row(label, val)
     pdf.ln(6)
 
-    # bt-06 student eligibility analysis
-    section_label = "Analisis Kelayakan Mahasiswa (BT-06)" if is_id else "Student Eligibility Analysis (BT-06)"
-    add_section_title(section_label)
+    # section 2: rekapitulasi placement bt-07
+    pdf.add_page()
+    bt07_title = "Rekapitulasi Placement Mahasiswa (BT-07)" if is_id else "Student Placement Recapitulation (BT-07)"
+    add_section_title(bt07_title)
 
-    if is_id:
-        add_body_text(
-            f"Analisis kelayakan mahasiswa dilakukan berdasarkan beberapa kriteria utama, meliputi kelengkapan CV, "
-            f"portofolio, status keaktifan, ketersediaan, serta pencapaian IPK minimum. "
-            f"Dari {total_students:,} mahasiswa yang terevaluasi, {eligible_count:,} mahasiswa memenuhi seluruh persyaratan "
-            f"kelayakan yang ditetapkan."
+    bt07_intro = (
+        "Bagian ini menyajikan rekapitulasi lengkap data penempatan mahasiswa sesuai kebutuhan evaluasi institusi "
+        "berdasarkan BT-07, mencakup distribusi placement berdasarkan semester, program studi, perusahaan mitra, "
+        "dan jenis penempatan. Data yang disajikan merupakan akumulasi seluruh mahasiswa yang berhasil ditempatkan "
+        "selama periode yang tercatat dalam sistem SMILE."
+        if is_id else
+        "This section presents a complete recapitulation of student placement data per institutional evaluation "
+        "requirements under BT-07, covering distribution by semester, study program, partner company, and placement "
+        "type. Data represents all students successfully placed during the recorded period in the SMILE system."
+    )
+    add_body_text(bt07_intro)
+
+    # --- 2.1 Placement per Semester ---
+    add_subsection_title("2.1 Placement per Semester" if is_id else "2.1 Placement by Semester")
+
+    student_info = df_student_status[["NIM", "program_studi", "semester"]].drop_duplicates() if "program_studi" in df_student_status.columns else pd.DataFrame()
+    placed_df = df_ts[df_ts["progress_student"] == "Placement"].copy() if "progress_student" in df_ts.columns else pd.DataFrame()
+
+    if not placed_df.empty and not student_info.empty:
+        placed_sem = placed_df.merge(student_info[["NIM", "semester"]], on="NIM", how="left")
+        sem_counts = placed_sem["semester"].value_counts().sort_index()
+        sem_total = int(sem_counts.sum())
+        sem_median = placed_sem["semester"].astype(str).dropna().apply(lambda x: float(re.sub(r'[^0-9.]', '', x)) if re.sub(r'[^0-9.]', '', x) else 0).median()
+
+        sem_text = (
+            f"Berdasarkan data yang tercatat, mahasiswa yang berhasil ditempatkan tersebar pada berbagai semester akademik. "
+            f"Dari total {sem_total:,} mahasiswa yang ditempatkan, sebaran per semester menunjukkan pola yang bergantung "
+            f"pada siklus akademik dan kesiapan mahasiswa. Semester dengan jumlah placement tertinggi adalah semester "
+            f"{sem_counts.idxmax()} dengan {int(sem_counts.max()):,} mahasiswa."
+            if is_id else
+            f"Based on recorded data, successfully placed students are distributed across various academic semesters. "
+            f"Of {sem_total:,} total placements, the distribution reflects academic cycle patterns. "
+            f"The semester with the highest placements is semester {sem_counts.idxmax()} with {int(sem_counts.max()):,} students."
         )
+        add_body_text(sem_text)
+
+        fig_sem = _build_bt07_by_semester(df_ts, df_student_status)
+        add_chart_image(fig_sem, "Gambar 2.1 — Distribusi Placement per Semester" if is_id else "Figure 2.1 — Placement Distribution by Semester")
+
+        # Semester summary table
+        pdf.set_font("TNR", "B", 11)
+        pdf.cell(0, 8, "Tabel Rekapitulasi per Semester" if is_id else "Semester Summary Table", ln=1)
+        pdf.set_font("TNR", "", 10)
+        col_w = (pdf.w - pdf.l_margin - pdf.r_margin) / 3
+        pdf.set_fill_color(220, 220, 220)
+        for header in (["Semester", "Jumlah Placement", "Persentase"] if is_id else ["Semester", "Placements", "Percentage"]):
+            pdf.cell(col_w, 7, header, border=1, align="C", fill=True, ln=0)
+        pdf.ln()
+        for sem, cnt in sem_counts.items():
+            pct = round(cnt / sem_total * 100, 1) if sem_total > 0 else 0
+            pdf.cell(col_w, 6, str(sem), border=1, align="C", ln=0)
+            pdf.cell(col_w, 6, f"{int(cnt):,}", border=1, align="C", ln=0)
+            pdf.cell(col_w, 6, f"{pct}%", border=1, align="C", ln=0)
+            pdf.ln()
+        pdf.ln(4)
+
     else:
-        add_body_text(
-            f"Student eligibility is evaluated based on several key criteria including CV completeness, "
-            f"portfolio availability, active status, availability, and minimum GPA achievement. "
-            f"Out of {total_students:,} evaluated students, {eligible_count:,} met all eligibility requirements."
+        add_body_text("Data semester tidak tersedia." if is_id else "Semester data not available.")
+
+    # --- 2.2 Placement per Program Studi ---
+    add_subsection_title("2.2 Placement per Program Studi" if is_id else "2.2 Placement by Study Program")
+
+    if not placed_df.empty and not student_info.empty:
+        placed_prodi = placed_df.merge(student_info[["NIM", "program_studi"]], on="NIM", how="left")
+        prodi_counts = placed_prodi["program_studi"].value_counts().head(10)
+        prodi_total = int(prodi_counts.sum())
+
+        prodi_text = (
+            f"Distribusi placement per program studi menunjukkan pola kebutuhan industri yang bervariasi. "
+            f"Program studi yang paling banyak menghasilkan lulusan yang ditempatkan adalah {prodi_counts.idxmax()} "
+            f"dengan {int(prodi_counts.max()):,} mahasiswa, mewakili {round(prodi_counts.max() / prodi_total * 100, 1) if prodi_total > 0 else 0}% "
+            f"dari total {prodi_total:,} mahasiswa yang berhasil ditempatkan pada 10 program studi teratas."
+            if is_id else
+            f"Placement distribution by study program reflects varying industry demand patterns. "
+            f"The study program with the highest placement count is {prodi_counts.idxmax()} with "
+            f"{int(prodi_counts.max()):,} students, representing "
+            f"{round(prodi_counts.max() / prodi_total * 100, 1) if prodi_total > 0 else 0}% of {prodi_total:,} "
+            f"total placed students in the top 10 study programs."
         )
+        add_body_text(prodi_text)
 
-    fig_elig = _build_eligibility_pie(df_student_eligibility)
-    elig_caption = "Komposisi Kelayakan Mahasiswa" if is_id else "Student Eligibility Composition"
-    add_chart_image(fig_elig, elig_caption)
+        fig_prodi = _build_bt07_by_prodi(df_ts, df_student_status)
+        add_chart_image(fig_prodi, "Gambar 2.2 — Placement per Program Studi (Top 10)" if is_id else "Figure 2.2 — Placement by Study Program (Top 10)")
 
-    # bt-03 bt-04 company analysis
-    section_label = "Analisis Permintaan Perusahaan (BT-03, BT-04)" if is_id else "Company Request Analysis (BT-03, BT-04)"
-    add_section_title(section_label)
-
-    if is_id:
-        add_body_text(
-            f"Selama periode yang tercatat, terdapat {total_requests:,} permintaan talent dari {total_companies:,} "
-            f"perusahaan mitra. Distribusi permintaan menunjukkan variasi yang signifikan berdasarkan jenis penempatan "
-            f"maupun sektor industri. Berikut adalah distribusi placement berdasarkan jenis penempatan."
-        )
     else:
-        add_body_text(
-            f"During the recorded period, there were {total_requests:,} talent requests from {total_companies:,} "
-            f"partner companies. Request distribution shows significant variation across placement types "
-            f"and industry sectors. Below is the placement distribution by placement type."
+        add_body_text("Data program studi tidak tersedia." if is_id else "Study program data not available.")
+
+    # --- 2.3 Placement per Perusahaan (Top 10) ---
+    add_subsection_title("2.3 Placement per Perusahaan (Top 10)" if is_id else "2.3 Placement by Company (Top 10)")
+
+    if not placed_df.empty and "company" in placed_df.columns:
+        comp_counts = placed_df.groupby("company").size().nlargest(10)
+        comp_total_top10 = int(comp_counts.sum())
+
+        comp_text = (
+            f"Sepuluh perusahaan teratas berdasarkan jumlah mahasiswa yang berhasil ditempatkan mencakup {comp_total_top10:,} "
+            f"mahasiswa dari total {total_placement:,} placement yang tercatat. Perusahaan dengan kontribusi placement terbanyak "
+            f"adalah {comp_counts.idxmax()} dengan {int(comp_counts.max()):,} mahasiswa. Data ini mencerminkan kekuatan "
+            f"kemitraan institusi dengan sektor industri yang relevan."
+            if is_id else
+            f"The top 10 companies by placement count account for {comp_total_top10:,} students out of {total_placement:,} "
+            f"total recorded placements. The company with the highest contribution is {comp_counts.idxmax()} with "
+            f"{int(comp_counts.max()):,} students. This data reflects the strength of institutional partnerships with relevant industry sectors."
         )
+        add_body_text(comp_text)
 
-    fig_type = _build_placement_by_type_chart(df_tc, df_ts)
-    type_caption = "Distribusi Placement berdasarkan Jenis Penempatan" if is_id else "Placement Distribution by Type"
-    add_chart_image(fig_type, type_caption)
+        fig_comp = _build_bt07_by_company(df_ts)
+        add_chart_image(fig_comp, "Gambar 2.3 — Top 10 Perusahaan berdasarkan Jumlah Placement" if is_id else "Figure 2.3 — Top 10 Companies by Placement Count")
 
-    fig_trend = _build_monthly_request_trend(df_tc)
-    trend_caption = "Tren Permintaan Talent Bulanan" if is_id else "Monthly Talent Request Trend"
-    add_chart_image(fig_trend, trend_caption)
-
-    if is_id:
-        add_body_text(
-            "Grafik tren di atas menunjukkan pola permintaan talent dari waktu ke waktu. "
-            "Fluktuasi ini dipengaruhi oleh siklus akademik dan kebutuhan industri yang bervariasi setiap bulannya."
-        )
     else:
-        add_body_text(
-            "The trend chart above shows talent request patterns over time. "
-            "These fluctuations are influenced by academic cycles and varying monthly industry needs."
+        add_body_text("Data perusahaan tidak tersedia." if is_id else "Company data not available.")
+
+    # --- 2.4 Placement per Jenis Penempatan ---
+    add_subsection_title("2.4 Placement per Jenis Penempatan" if is_id else "2.4 Placement by Type")
+
+    fig_type, jenis_counts = _build_bt07_by_type(df_tc, df_ts)
+    jenis_total = int(jenis_counts.sum())
+
+    jenis_text = (
+        f"Distribusi penempatan berdasarkan jenis atau skema program menunjukkan komposisi antara Magang, "
+        f"Penempatan Penuh Waktu (Full-time), dan Paruh Waktu (Part-time). "
+    )
+    for jenis, cnt in jenis_counts.items():
+        pct = round(cnt / jenis_total * 100, 1) if jenis_total > 0 else 0
+        jenis_text += f"Jenis {jenis} mencakup {int(cnt):,} mahasiswa ({pct}%). "
+
+    if not is_id:
+        jenis_text = (
+            f"Placement distribution by scheme shows the composition of Internship (Magang), "
+            f"Full-time, and Part-time programs. "
         )
+        for jenis, cnt in jenis_counts.items():
+            pct = round(cnt / jenis_total * 100, 1) if jenis_total > 0 else 0
+            jenis_text += f"{jenis} covers {int(cnt):,} students ({pct}%). "
 
-    fig_top = _build_top_companies_chart(df_tc, df_ts)
-    top_caption = "Perusahaan dengan Placement Tertinggi" if is_id else "Top Companies by Placement"
-    add_chart_image(fig_top, top_caption)
+    add_body_text(jenis_text)
+    add_chart_image(fig_type, "Gambar 2.4 — Distribusi Placement per Jenis Penempatan" if is_id else "Figure 2.4 — Placement Distribution by Type", width_mm=110)
 
-    # bt-02 bt-05 process analysis
-    section_label = "Analisis Proses Seleksi (BT-02, BT-05)" if is_id else "Selection Process Analysis (BT-02, BT-05)"
-    add_section_title(section_label)
+    # section 3: analisis proses seleksi bt-02 dan bt-05
+    pdf.add_page()
+    proc_title = "Analisis Proses Seleksi (BT-02, BT-05)" if is_id else "Selection Process Analysis (BT-02, BT-05)"
+    add_section_title(proc_title)
 
     total_tracked = len(df_ts)
     finished = ["Placement", "Rejected", "Finish"]
@@ -542,33 +644,54 @@ def generate_report_pdf(
     ghost_total = ghosting_stats.get("total_ghosted", 0)
     fu_total = ghosting_stats.get("total_fu", 0)
 
-    if is_id:
-        add_body_text(
-            f"Sistem mencatat {total_tracked:,} total proses seleksi kandidat. Dari jumlah tersebut, "
-            f"{active_in_process:,} proses masih aktif berjalan, sementara {total_placement:,} mahasiswa berhasil "
-            f"ditempatkan. Sistem mendeteksi {ghost_total:,} kasus ghosting dan {fu_total:,} kasus yang memerlukan "
-            f"tindakan follow-up dari tim CDC."
-        )
-    else:
-        add_body_text(
-            f"The system records {total_tracked:,} total candidate selection processes. Of these, "
-            f"{active_in_process:,} processes are still actively running, while {total_placement:,} students were "
-            f"successfully placed. The system detected {ghost_total:,} ghosting cases and {fu_total:,} cases "
-            f"requiring follow-up action from the CDC team."
-        )
+    proc_text = (
+        f"Sistem mencatat {total_tracked:,} total proses seleksi kandidat yang berjalan. Dari jumlah tersebut, "
+        f"{active_in_process:,} proses masih aktif berjalan, sementara {total_placement:,} mahasiswa berhasil "
+        f"ditempatkan. Tim CDC perlu memberikan perhatian khusus pada {ghost_total:,} kasus ghosting dan "
+        f"{fu_total:,} kasus yang memerlukan tindakan follow-up segera."
+        if is_id else
+        f"The system records {total_tracked:,} total candidate selection processes. Of these, "
+        f"{active_in_process:,} processes are still active, while {total_placement:,} students were successfully placed. "
+        f"The CDC team should pay particular attention to {ghost_total:,} ghosting cases and "
+        f"{fu_total:,} cases requiring immediate follow-up action."
+    )
+    add_body_text(proc_text)
 
     fig_stage = _build_stage_distribution(df_ts)
-    stage_caption = "Distribusi Tahapan Seleksi" if is_id else "Selection Stage Distribution"
+    stage_caption = "Gambar 3.1 — Distribusi Tahapan Seleksi Aktif" if is_id else "Figure 3.1 — Active Selection Stage Distribution"
     add_chart_image(fig_stage, stage_caption)
 
     fig_ghost = _build_ghosting_pie(active_in_process, fu_total, ghost_total)
-    ghost_caption = "Proporsi Ghosting pada Kandidat Aktif" if is_id else "Ghosting Proportion Among Active Candidates"
-    add_chart_image(fig_ghost, ghost_caption)
+    ghost_caption = "Gambar 3.2 — Proporsi Ghosting pada Kandidat Aktif" if is_id else "Figure 3.2 — Ghosting Proportion Among Active Candidates"
+    add_chart_image(fig_ghost, ghost_caption, width_mm=110)
 
-    # bt-08 data quality
+    # section 4: analisis kelayakan mahasiswa bt-06
+    pdf.add_page()
+    elig_title = "Analisis Kelayakan Mahasiswa (BT-06)" if is_id else "Student Eligibility Analysis (BT-06)"
+    add_section_title(elig_title)
+
+    elig_text = (
+        f"Analisis kelayakan mahasiswa dilakukan berdasarkan serangkaian kriteria yang mencakup kelengkapan CV, "
+        f"ketersediaan portofolio, status keaktifan, ketersediaan untuk ditempatkan, serta pencapaian IPK minimum. "
+        f"Dari {total_students:,} mahasiswa yang dievaluasi, {eligible_count:,} mahasiswa ({eligible_pct}%) "
+        f"memenuhi seluruh persyaratan kelayakan yang ditetapkan dan siap untuk dikirimkan kepada perusahaan mitra."
+        if is_id else
+        f"Student eligibility evaluation covers CV completeness, portfolio availability, active enrollment status, "
+        f"placement availability, and minimum GPA requirements. Of {total_students:,} evaluated students, "
+        f"{eligible_count:,} ({eligible_pct}%) meet all eligibility requirements and are ready for company submission."
+    )
+    add_body_text(elig_text)
+
+    fig_elig = _build_eligibility_pie(df_student_eligibility)
+    elig_caption = "Gambar 4.1 — Komposisi Kelayakan Mahasiswa" if is_id else "Figure 4.1 — Student Eligibility Composition"
+    add_chart_image(fig_elig, elig_caption, width_mm=110)
+
+    # ============================================================
+    # kualitas data bt-08
     if not df_quality_master.empty:
-        section_label = "Analisis Kualitas Data (BT-08)" if is_id else "Data Quality Analysis (BT-08)"
-        add_section_title(section_label)
+        pdf.add_page()
+        quality_title = "Analisis Kualitas Data (BT-08)" if is_id else "Data Quality Analysis (BT-08)"
+        add_section_title(quality_title)
 
         total_q = len(df_quality_master)
         critical_count = len(df_quality_master[df_quality_master["staleness"] == "Critical"]) if "staleness" in df_quality_master.columns else 0
@@ -576,53 +699,52 @@ def generate_report_pdf(
         mismatch_count = int(df_quality_master["has_mismatch"].sum()) if "has_mismatch" in df_quality_master.columns else 0
         mismatch_pct = round(mismatch_count / total_q * 100, 1) if total_q > 0 else 0
 
-        if is_id:
-            add_body_text(
-                f"Evaluasi kualitas data dilakukan dengan menganalisis kebaruan sinkronisasi dan konsistensi data "
-                f"antara tabel Student All dan Status Student. Dari {total_q:,} record mahasiswa, "
-                f"{critical_count:,} ({critical_pct}%) memiliki data dengan status sinkronisasi kritis "
-                f"(lebih dari 179 hari tanpa pembaruan), dan {mismatch_count:,} ({mismatch_pct}%) menunjukkan "
-                f"ketidakcocokan data antar kedua tabel."
-            )
-        else:
-            add_body_text(
-                f"Data quality evaluation analyzes synchronization freshness and data consistency "
-                f"between the Student All and Status Student tables. Out of {total_q:,} student records, "
-                f"{critical_count:,} ({critical_pct}%) have critical synchronization status "
-                f"(over 179 days without updates), and {mismatch_count:,} ({mismatch_pct}%) show "
-                f"data mismatches between the two tables."
-            )
+        quality_text = (
+            f"Evaluasi kualitas data dilakukan dengan menganalisis kebaruan sinkronisasi dan konsistensi data "
+            f"antara tabel Student All dan Status Student. Dari {total_q:,} rekaman mahasiswa yang dianalisis, "
+            f"{critical_count:,} rekaman ({critical_pct}%) berada dalam status sinkronisasi kritis (lebih dari "
+            f"179 hari tanpa pembaruan), dan {mismatch_count:,} rekaman ({mismatch_pct}%) menunjukkan "
+            f"ketidakcocokan data antar tabel yang perlu segera ditindaklanjuti."
+            if is_id else
+            f"Data quality evaluation analyzes synchronization freshness and consistency between the Student All "
+            f"and Status Student tables. Of {total_q:,} student records analyzed, {critical_count:,} ({critical_pct}%) "
+            f"have critical synchronization status (over 179 days without updates), and {mismatch_count:,} ({mismatch_pct}%) "
+            f"show data mismatches requiring immediate attention."
+        )
+        add_body_text(quality_text)
 
         fig_stale = _build_staleness_pie(df_quality_master)
-        stale_caption = "Distribusi Keusangan Data" if is_id else "Data Staleness Distribution"
-        add_chart_image(fig_stale, stale_caption)
+        stale_caption = "Gambar 5.1 — Distribusi Keusangan Data Sinkronisasi" if is_id else "Figure 5.1 — Data Synchronization Staleness Distribution"
+        add_chart_image(fig_stale, stale_caption, width_mm=110)
 
     # closing
-    pdf.add_page()
     closing_title = "Penutup" if is_id else "Closing"
     add_section_title(closing_title)
 
-    if is_id:
-        add_body_text(
-            "Laporan ini memberikan gambaran menyeluruh mengenai kinerja sistem placement mahasiswa "
-            "pada periode yang tercatat. Beberapa poin penting yang perlu mendapat perhatian antara lain "
-            "tingkat kelayakan mahasiswa, efektivitas proses seleksi, serta kualitas sinkronisasi data."
-        )
-        add_body_text(
-            "Tim CDC disarankan untuk terus memantau indikator kinerja utama yang disajikan dalam laporan ini, "
-            "khususnya terkait tingkat ghosting dan keusangan data, guna memastikan operasional placement "
-            "berjalan dengan optimal."
-        )
-    else:
-        add_body_text(
-            "This report provides a comprehensive overview of the student placement system performance "
-            "during the recorded period. Key areas that require attention include student eligibility rates, "
-            "selection process effectiveness, and data synchronization quality."
-        )
-        add_body_text(
-            "The CDC team is encouraged to continuously monitor the key performance indicators presented in this report, "
-            "particularly regarding ghosting rates and data staleness, to ensure optimal placement operations."
-        )
+    closing_text = (
+        "Laporan periodik ini menyajikan gambaran menyeluruh kinerja sistem placement mahasiswa pada periode yang "
+        "tercatat dalam SMILE Dashboard. Analisis rekapitulasi placement berdasarkan semester, program studi, "
+        "perusahaan, dan jenis penempatan memberikan landasan evaluasi yang komprehensif bagi institusi dalam "
+        "menilai efektivitas program placement secara kuantitatif."
+        if is_id else
+        "This periodic report presents a comprehensive overview of the student placement system performance "
+        "recorded in the SMILE Dashboard. The placement recapitulation analysis by semester, study program, "
+        "company, and placement type provides a comprehensive evaluation basis for institutional assessment "
+        "of placement program effectiveness quantitatively."
+    )
+    add_body_text(closing_text)
+
+    rec_text = (
+        "Tim CDC disarankan untuk: (1) menindaklanjuti kasus ghosting yang teridentifikasi dalam sistem, "
+        "(2) memperbarui data sinkronisasi yang berada dalam status kritis, (3) meningkatkan upaya penempatan "
+        "pada program studi dengan tingkat placement yang masih rendah, dan (4) memperluas kemitraan dengan "
+        "perusahaan di sektor industri yang relevan untuk meningkatkan penyerapan lulusan."
+        if is_id else
+        "The CDC team is advised to: (1) follow up on identified ghosting cases, (2) update synchronization "
+        "data in critical status, (3) intensify placement efforts for study programs with low placement rates, "
+        "and (4) expand partnerships with companies in relevant industry sectors to increase graduate absorption."
+    )
+    add_body_text(rec_text)
 
     out = pdf.output(dest="S")
     if isinstance(out, str):
